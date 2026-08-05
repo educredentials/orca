@@ -14,53 +14,82 @@
 	import FaTrashAlt from 'svelte-icons-pack/fa/FaTrashAlt.js';
 	import AchievementCriteria from '$lib/partials/achievement/AchievementCriteria.svelte';
 	import { imageUrl } from '$lib/utils/imageUrl';
+	import { isAdmin } from '$lib/permissions/isAdmin';
 	import ClaimSummaryCard from '$lib/components/achievement/ClaimSummaryCard.svelte';
 	import Heading from '$lib/components/Heading.svelte';
+	import { alignmentRowsFromAchievementJson } from '$lib/data/alignment';
 	import QRCode from '$lib/components/QRCode.svelte';
 	import type {
 		Achievement,
 		AchievementCategory,
 		AchievementClaim,
-		AchievementConfig,
 		ClaimEndorsement,
 		User
 	} from '@prisma/client';
 	import AchievementSummary from '$lib/components/achievement/AchievementSummary.svelte';
 	import {
 		acLoading,
-		achievementCategories,
 		fetchAchievementCategories,
 		getCategoryById
-	} from '$lib/stores/achievementStore';
+	} from '$lib/stores/achievementCategoryStore';
 	import ClaimList from '$lib/components/achievement/ClaimList.svelte';
 	import { onMount, setContext } from 'svelte';
 	import { calculatePageAndSize } from '$lib/utils/pagination';
 	import { PUBLIC_HTTP_PROTOCOL } from '$env/static/public';
 	import { ensureLoaded } from '$lib/stores/common';
+	import {
+		achievements,
+		achievementsLoading,
+		fetchAchievements
+	} from '$lib/stores/achievementStore';
+	import {
+		backpackClaims,
+		backpackClaimsLoading,
+		fetchBackpackClaims
+	} from '$lib/stores/backpackStore';
 
 	dayjs.extend(relativeTime);
 
 	export let data: PageData;
+
+	$: alignments = alignmentRowsFromAchievementJson(data.achievement.json);
+	$: hasAlignments = alignments.length > 0;
 	let showDeleteModal = false;
 	let showShareModal = false;
 
 	const breadcrumbItems = [
-		{ text: 'Home', href: '/' },
-		{ text: 'Achievements', href: '/achievements' },
+		{ text: m.each_fluffy_fox_view(), href: '/' },
+		{ text: m.antsy_grand_rabbit_gaze(), href: '/achievements' },
 		{ text: data.achievement.name }
 	];
 
-	let config: AchievementConfig | null = null;
+	let config: App.AchievementConfig | null = null;
 	let claim: AchievementClaim | undefined;
 	let category: AchievementCategory | undefined;
 	let userHoldsRequiredAchievement = false;
+	let inviteCapability = false;
 	let reviewRequires: Achievement | undefined;
 	let invite: (ClaimEndorsement & { creator: User | null }) | undefined;
 	$: {
-		config = data.achievement.achievementConfig;
+		config = data.achievement.achievementConfig as App.AchievementConfig | null;
 		claim = data.relatedClaims.find((c) => data.achievement.id == c.achievementId);
 		userHoldsRequiredAchievement =
-			data.relatedClaims.filter((c) => c.achievementId == config?.claimRequiresId).length > 0;
+			data.relatedClaims.filter(
+				(c) =>
+					c.achievementId == config?.claimRequiresId &&
+					c.validFrom !== null &&
+					c.claimStatus === 'ACCEPTED' &&
+					(c.validUntil === null || new Date(c.validUntil) > new Date())
+			).length > 0;
+		inviteCapability =
+			isAdmin({ user: data.session?.user || undefined }) ||
+			(!!config?.json?.capabilities?.inviteRequires &&
+				!!$backpackClaims.find(
+					(c) =>
+						c.achievementId == config?.json?.capabilities?.inviteRequires &&
+						c.validFrom &&
+						c.claimStatus == 'ACCEPTED'
+				));
 
 		reviewRequires = data.relatedAchievements
 			.filter((c) => data.achievement.achievementConfig?.reviewRequiresId == c.id)
@@ -73,9 +102,9 @@
 	setContext('session', data.session);
 
 	onMount(async () => {
-		if (!data.achievement.categoryId) return;
-
-		await ensureLoaded($achievementCategories, fetchAchievementCategories, $acLoading);
+		await ensureLoaded(achievementsLoading, fetchAchievements);
+		await ensureLoaded(acLoading, fetchAchievementCategories);
+		await ensureLoaded(backpackClaimsLoading, fetchBackpackClaims);
 		category = getCategoryById(data.achievement.categoryId ?? 'Uncategorized');
 	});
 </script>
@@ -87,27 +116,35 @@
 		{data.achievement.name}
 	</h1>
 	<div class="inline-flex items-center">
+		{#if inviteCapability}
+			<Button
+				href={`/achievements/${data.achievement.id}/award`}
+				text={m.bright_happy_sparrow_award()}
+			/>
+		{/if}
+
 		{#if data.editAchievementCapability}
-			<Button href={`/achievements/${data.achievement.id}/award`} text={m.awardCTA()} />
 			<Button
 				href={`/achievements/${data.achievement.id}/edit`}
 				submodule="secondary"
-				text={m.editCTA()}
+				text={m.sharp_clear_fox_edit()}
 			/>
+		{/if}
+		{#if isAdmin({ user: data.session?.user || undefined })}
 			<Button
 				submodule="danger"
 				on:click={() => {
 					showDeleteModal = true;
 				}}
 			>
-				<span class="sr-only">{m.deleteCTA()}</span>
+				<span class="sr-only">{m.firm_steady_boar_delete()}</span>
 				<div class="h-4 w-4">
 					<Icon src={FaTrashAlt} size="16" color="currentColor" />
 				</div>
 			</Button>
 		{/if}
 		<Button
-			text={m.share()}
+			text={m.happy_sparse_lemur_clasp()}
 			submodule="secondary"
 			on:click={() => {
 				showShareModal = true;
@@ -118,9 +155,9 @@
 				href={invite
 					? `/achievements/${invite.achievementId}/claim?i=${invite.id}&e=${encodeURIComponent(
 							invite.inviteeEmail
-					  )}`
+						)}`
 					: `/achievements/${data.achievement.id}/claim`}
-				text={m.claimCTA()}
+				text={m.bold_swift_eagle_claim()}
 				submodule="primary"
 			/>
 		{/if}
@@ -130,7 +167,7 @@
 {#if category !== undefined}
 	<span
 		class="bg-gray-100 text-gray-800 text-md font-medium mr-2 px-2.5 py-0.5 rounded dark:bg-gray-700 dark:text-gray-300"
-		>{m.category()}: {category.name}</span
+		>{m.serious_gentle_boar_nurture()}: {category.name}</span
 	>
 {/if}
 
@@ -138,7 +175,7 @@
 	{#if data.achievement.image}
 		<img
 			src={imageUrl(data.achievement.image)}
-			alt={m.achievementImageAltText({ name: data.achievement.name })}
+			alt={m.firm_steady_boar_imagealt({ name: data.achievement.name })}
 		/>
 	{:else}
 		<div class="text-gray-400 dark:text-gray-700">
@@ -158,13 +195,13 @@
 	{:else if invite || claim?.claimStatus == 'UNACCEPTED'}
 		<!-- C2: User does not have a claim, but has an invitation to claim (when a user existed at time of invite, this is represented by a claim with status unaccepted) -->
 		<AchievementSummary
-			achievement={{ ...data.achievement, name: m.status_invited_medium(), description: '' }}
+			achievement={{ ...data.achievement, name: m.frail_weary_rabbit_nurture(), description: '' }}
 		>
 			<div slot="moredescription">
 				<p class="text-sm md:text-md font-light text-gray-500 dark:text-gray-400">
-					{m.status_invited_description()}
+					{m.kind_dry_panther_bask()}
 					{#if invite}
-						{m.achievement_invitedByNameAtTime({
+						{m.watery_fluffy_mole_pout({
 							givenName: invite?.creator?.givenName ?? '',
 							familyName: invite?.creator?.familyName ?? '',
 							timeAgo: dayjs(invite.createdAt).fromNow()
@@ -184,10 +221,10 @@
 						href={invite
 							? `/achievements/${data.achievement.id}/claim?i=${invite?.id}&e=${encodeURIComponent(
 									invite?.inviteeEmail
-							  )}`
+								)}`
 							: `/achievements/${data.achievement.id}/claim`}
 					>
-						<span class="sr-only">{m.claimCTA()}</span>
+						<span class="sr-only">{m.bold_swift_eagle_claim()}</span>
 						<Icon src={FaSolidInfoCircle} size="20" color="currentColor" />
 					</a>
 				</div>
@@ -198,33 +235,46 @@
 
 <!-- Claim Rules -->
 <div class="mt-4 max-w-2xl">
-	<Heading title={m.claimConfiguration_heading()} level="h3">
+	<Heading title={m.warm_tangy_deer_heading()} level="h3">
 		{#if !config?.claimable}
 			<!-- A1: Achievement is not claimable -->
-			{m.claimConfiguration_claimDisabled()}
-			{m.claimConfiguration_adminOnly_description()}
-		{:else if config?.claimRequiresId}
+			{m.firm_clear_fox_disabled()}.
+		{/if}
+
+		{#if config?.claimable && config?.claimRequiresId}
 			<!-- A2: Achievement is claimable, and requires a prerequisite -->
-			{#each data.relatedAchievements.filter((a) => config?.claimRequiresId == a.id) as claimRequires}
-				{m.claimConfiguration_claimRequiresSummary()}
-				<a
-					href={`/achievements/${claimRequires.id}`}
-					class="font-bold underline hover:no-underline"
-				>
-					{claimRequires.name}</a
-				>{#if userHoldsRequiredAchievement}. {m.claimConfiguration_userMeetsRequirement()}
+			{@const claimRequires = $achievements.find((a) => config?.claimRequiresId == a.id)}
+			{#if claimRequires}
+				{m.sharp_quiet_panther_requires()}
+				<a href={`/achievements/${claimRequires.id}`} class="font-bold underline hover:no-underline"
+					>{claimRequires.name}</a
+				>. {#if userHoldsRequiredAchievement}
+					{m.swift_steady_falcon_meets()}
 				{:else}
-					{m.claimConfiguration_userNotMeetsRequirement()}
+					{m.sharp_clear_fox_notmeets()}
 				{/if}
-			{/each}
-		{:else}
+			{/if}
+		{:else if config?.claimable && !config?.claimRequiresId}
+			<!-- A3: Achievement is claimable by anybody, even members of the public -->
 			<span class="text-gray-500 dark:text-gray-400">
-				{m.achievement_openClaimable_description()}
+				{m.sharp_fluffy_mantis_delight()}
 			</span>
 		{/if}
 
+		{@const inviteRequires = config?.json?.capabilities?.inviteRequires
+			? $achievements.find((a) => config?.json?.capabilities?.inviteRequires == a.id)
+			: undefined}
+		{#if inviteRequires}
+			{m.bright_happy_sparrow_invitedesc()}
+			<a href={`/achievements/${inviteRequires?.id}`} class="font-bold underline hover:no-underline"
+				>{inviteRequires?.name}</a
+			>.
+		{:else if !config?.claimable}
+			{m.calm_steady_lynx_adminonly()}
+		{/if}
+
 		{#if reviewRequires && !!config?.reviewsRequired}
-			{m.claimConfiguration_reviewsRequiredSummary({
+			{m.warm_tangy_deer_reviewsum({
 				reviewsRequired: config?.reviewsRequired ?? 0
 			})}
 			<a
@@ -233,44 +283,93 @@
 			>
 				{reviewRequires.name}</a
 			>.
+		{:else if !config?.reviewRequiresId && config?.reviewsRequired}
+			{m.calm_steady_lynx_adminreview()}
 		{:else}
-			{m.claimConfiguration_noReviewsRequired_description()}
+			{m.gentle_brave_falcon_noreviews()}
 		{/if}
 	</Heading>
 </div>
+
+{#if data.org.json?.permissions?.editAchievementCapability?.requiresAchievement == data.achievement.id}
+	<div class="mt-4 max-w-2xl">
+		<p class="text-sm text-gray-500 dark:text-gray-400">
+			{m.next_arable_mule_zoom()}
+		</p>
+	</div>
+{/if}
 
 <!-- Criteria -->
 <div class="my-4 max-w-2xl">
 	<AchievementCriteria achievement={data.achievement} />
 </div>
 
+<!-- Alignments -->
+{#if hasAlignments}
+	<div class="my-4 max-w-2xl">
+		<Heading
+			title={m.grand_steady_bison_walk()}
+			level="h3"
+			description={m.wide_quiet_beaver_build()}
+		/>
+		<div class="mt-4 space-y-4">
+			{#each alignments as alignment}
+				<div
+					class="border border-gray-200 dark:border-gray-700 rounded-lg p-4 bg-white dark:bg-gray-800"
+				>
+					<div class="flex flex-col gap-2">
+						<a
+							href={alignment.targetUrl}
+							target="_blank"
+							rel="noopener noreferrer"
+							class="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 font-medium"
+						>
+							{alignment.targetName}
+						</a>
+						{#if alignment.targetCode}
+							<span class="text-sm text-gray-600 dark:text-gray-400">
+								{m.tiny_neat_hare_skip()}:
+								<code class="bg-gray-100 dark:bg-gray-700 px-1 py-0.5 rounded"
+									>{alignment.targetCode}</code
+								>
+							</span>
+						{/if}
+						{#if alignment.targetDescription}
+							<p class="text-sm text-gray-700 dark:text-gray-300">
+								{alignment.targetDescription}
+							</p>
+						{/if}
+					</div>
+				</div>
+			{/each}
+		</div>
+	</div>
+{/if}
+
 <!-- Existing community claims -->
 <Heading
-	title={m.achievement_badgesClaimed_heading()}
+	title={m.sad_antsy_crossbill_race()}
 	level="h3"
-	description={`${m.achievement_claimCountSummary({
+	description={`${m.vivid_best_bat_soar({
 		count: data.achievement._count.achievementClaims
-	})}`}
+	})} ${
+		['GENERAL_ADMIN', 'CONTENT_ADMIN'].includes(data.session?.user?.orgRole || 'none')
+			? m.bad_mad_jackdaw_tap()
+			: m.great_merry_boar_ascend()
+	}`}
 />
 
-{#if data.achievement._count.achievementClaims > 0}
-	{#if data.session?.user}
-		<div class="relative overflow-x-auto">
-			<ClaimList
-				data={{
-					...calculatePageAndSize($page.url),
-					total: data.achievement._count.achievementClaims
-				}}
-			/>
-		</div>
-	{:else}
-		<div class="mb-4 text-sm text-gray-500 dark:text-gray-400">
-			{m.achievement_badgesClaimed_loginCTA_description()}
-		</div>
-	{/if}
+{#if data.session?.user}
+	<div class="relative overflow-x-auto">
+		<ClaimList
+			{...calculatePageAndSize($page.url)}
+			totalCount={data.achievement._count.achievementClaims}
+			enableInvites={inviteCapability}
+		/>
+	</div>
 {:else}
 	<div class="mb-4 text-sm text-gray-500 dark:text-gray-400">
-		{m.achievement_badgesClaimed_noneAvailable()}
+		{m.sunny_brave_lemur_feel()}
 	</div>
 {/if}
 
@@ -278,13 +377,13 @@
 
 <Modal
 	visible={showDeleteModal}
-	title={m.achievement_deleteConfirm_heading()}
+	title={m.stout_sad_bat_spur()}
 	on:close={() => {
 		showDeleteModal = false;
 	}}
 	actions={[
 		{
-			label: m.cancelCTA(),
+			label: m.calm_steady_lynx_cancel(),
 			buttonType: 'button',
 			submodule: 'secondary',
 			onClick: () => {
@@ -292,7 +391,7 @@
 			}
 		},
 		{
-			label: m.deleteCTA(),
+			label: m.firm_steady_boar_delete(),
 			buttonType: 'button',
 			submodule: 'danger',
 			onClick: () => {
@@ -304,7 +403,7 @@
 	]}
 >
 	<p class="text-sm text-gray-500 dark:text-gray-400 max-w-prose">
-		{m.achievement_deleteConfirm_description({
+		{m.plane_fancy_goat_scribe({
 			name: data.achievement.name,
 			count: data.achievement._count.achievementClaims
 		})}
@@ -313,13 +412,13 @@
 
 <Modal
 	visible={showShareModal}
-	title={m.share()}
+	title={m.happy_sparse_lemur_clasp()}
 	on:close={() => {
 		showShareModal = false;
 	}}
 	actions={[
 		{
-			label: m.share_copyUrl(),
+			label: m.lucky_tired_mole_ask(),
 			buttonType: 'button',
 			submodule: 'secondary',
 			onClick: (e) => {
@@ -328,7 +427,7 @@
 				}
 				const url = `${PUBLIC_HTTP_PROTOCOL}://${data.org.domain}/achievements/${data.achievement.id}`;
 				navigator.clipboard.writeText(url);
-				console.log(m.claim_shareUrlCopied() + url);
+				console.log(m.dense_cool_owl_nurture() + url);
 				e.preventDefault();
 				e.stopPropagation();
 			}
@@ -336,10 +435,10 @@
 	]}
 >
 	<p class="text-sm text-gray-500 dark:text-gray-400">
-		{m.achievement_share_description()}
+		{m.best_fresh_honeybadger_pet()}
 	</p>
 	<QRCode
 		url={`${PUBLIC_HTTP_PROTOCOL}://${data.org.domain}/achievements/${data.achievement.id}`}
-		alt={m.share_qrCodeImageAltText()}
+		alt={m.plane_light_fish_view()}
 	/>
 </Modal>

@@ -1,10 +1,10 @@
 import * as m from '$lib/i18n/messages';
 import { error, redirect } from '@sveltejs/kit';
-import type { PageServerLoad, Actions } from './$types';
+import type { Actions } from './$types';
 import { prisma } from '$lib/../prisma/client';
-import type { AchievementClaim, ClaimEndorsement, Prisma } from '@prisma/client';
+import type { AchievementClaim } from '@prisma/client';
 import stripTags from '$lib/utils/stripTags';
-import { getUserClaim } from '$lib/data/achievementClaim';
+import { getValidUserClaim } from '$lib/data/achievementClaim';
 
 export const load = async ({ locals, params }) => {
 	// redirect user if logged out or doesn't hold org admin role
@@ -29,10 +29,10 @@ export const load = async ({ locals, params }) => {
 };
 
 export const actions: Actions = {
-	default: async ({ locals, cookies, request, params }) => {
+	default: async ({ locals, request, params }) => {
 		// Award a badge to a user by id (DID) or email identifier, but generate no user claim for it
 		if (!locals.session?.user) {
-			throw error(401, m.claim_unauthenticatedUserEndorsementError());
+			throw error(401, m.quick_happy_kite_zoom());
 		}
 
 		const requestData = await request.formData();
@@ -61,7 +61,7 @@ export const actions: Actions = {
 		});
 
 		const inviteeEmail = claim.user.identifiers.filter((i) => i.type == 'EMAIL')[0]?.identifier;
-		if (!inviteeEmail) throw error(400, m.endorsement_couldNotIdentifyEmailAddressError());
+		if (!inviteeEmail) throw error(400, m.curly_tired_guppy_link());
 
 		const created = true;
 		// If there is a member, ensure that there is an AchievementClaim
@@ -98,12 +98,12 @@ export const actions: Actions = {
 			shouldMakeClaimValid = true;
 		} else if (!claim.validFrom && claim.achievement.achievementConfig?.reviewRequiresId) {
 			// If the current user is not an admin but holds the required reviewer badge, the claim becomes valid.
-			const endorserReviewerBadge = await getUserClaim(
+			const endorserReviewerBadge = await getValidUserClaim(
 				locals.session.user.id,
 				claim.achievement.achievementConfig.reviewRequiresId,
 				locals.org.id
 			);
-			if (endorserReviewerBadge?.validFrom) {
+			if (endorserReviewerBadge) {
 				shouldMakeClaimValid = true;
 			}
 		} else if (!claim.validFrom && !claim.achievement.achievementConfig?.reviewRequiresId) {

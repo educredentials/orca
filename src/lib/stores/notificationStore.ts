@@ -9,11 +9,18 @@ interface NotificationAction {
 export class Notification {
 	id: string;
 	dismissable: boolean;
+	level: App.NotificationLevel;
 	message: string;
 	actions: NotificationAction[];
 
-	constructor(message: string, dismissable = true, actions: NotificationAction[] = []) {
+	constructor(
+		message: string,
+		dismissable = true,
+		level: App.NotificationLevel = 'info',
+		actions: NotificationAction[] = []
+	) {
 		this.id = uuidv4();
+		this.level = level;
 		this.message = message;
 		this.dismissable = dismissable;
 		this.actions = actions;
@@ -25,10 +32,10 @@ const generateNotificationStore = () => {
 
 	return {
 		subscribe,
-		addNotification: (notification: Notification) => {
+		add: (notification: Notification) => {
 			update((n) => [...n, notification]);
 		},
-		dismissNotification: (id: string) => {
+		dismiss: (id: string) => {
 			update((n) => n.filter((notification) => notification.id != id || !notification.dismissable));
 		}
 	};

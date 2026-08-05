@@ -2,18 +2,50 @@ import { sveltekit } from '@sveltejs/kit/vite';
 import { nodeLoaderPlugin } from '@vavite/node-loader/plugin';
 import basicSsl from '@vitejs/plugin-basic-ssl';
 import { defineConfig } from 'vite';
-import { paraglide } from '@inlang/paraglide-js-adapter-vite';
+import { paraglideVitePlugin } from '@inlang/paraglide-js';
 import * as dotenv from 'dotenv';
+import fs from 'fs';
+import path from 'path';
 
 dotenv.config();
 
-/** @type {import('vite').UserConfig} */
+// Plugin to fix SvelteKit-generated tsconfig.json with deprecated TypeScript options
+const fixTsconfig = () => {
+	const tsconfigPath = path.resolve('.svelte-kit/tsconfig.json');
+	if (fs.existsSync(tsconfigPath)) {
+		try {
+			const config = JSON.parse(fs.readFileSync(tsconfigPath, 'utf-8'));
+			if (config.compilerOptions) {
+				config.compilerOptions.verbatimModuleSyntax = true;
+				delete config.compilerOptions.importsNotUsedAsValues;
+				delete config.compilerOptions.preserveValueImports;
+				fs.writeFileSync(tsconfigPath, JSON.stringify(config, null, '\t') + '\n');
+			}
+		} catch {
+			// Ignore errors
+		}
+	}
+};
+
+const fixTsconfigPlugin = () => ({
+	name: 'fix-tsconfig',
+	buildStart() {
+		fixTsconfig();
+	},
+	configureServer() {
+		// Also fix on dev server start
+		fixTsconfig();
+	}
+});
+
 export default defineConfig(({ mode }) => {
 	let plugins = [
 		sveltekit(),
-		paraglide({
+		fixTsconfigPlugin(),
+		paraglideVitePlugin({
 			project: './project.inlang',
-			outdir: './src/lib/i18n'
+			outdir: './src/lib/i18n',
+			strategy: ['cookie', 'baseLocale']
 		})
 	];
 	if (mode === 'debug-dev') {
@@ -30,8 +62,16 @@ export default defineConfig(({ mode }) => {
 			devSourcemap: true
 		},
 		test: {
-			include: ['**/tests/vitest/**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}']
+			include: [
+				'**/tests/vitest/**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}',
+				'src/**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}'
+			]
 		},
-		plugins
+		plugins,
+		server: {
+			port: parseInt(process.env.SERVER_PORT || process.env.PORT || '5173'),
+			host: '0.0.0.0',
+			allowedHosts: true
+		}
 	};
 });

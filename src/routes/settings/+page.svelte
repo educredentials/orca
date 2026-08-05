@@ -1,4 +1,5 @@
 <script lang="ts">
+	import * as m from '$lib/i18n/messages';
 	import Button from '$lib/components/Button.svelte';
 	import ButtonGroup from '$lib/components/ButtonGroup.svelte';
 	import Heading from '$lib/components/Heading.svelte';
@@ -25,15 +26,15 @@
 	{data.session?.user?.familyName}
 </h1>
 <p class="my-4 text-sm text-gray-500 dark:text-gray-400 max-w-2xl">
-	You can control how your profile is displayed to other users in the community and how your
-	credentials are delivered to you.
+	{m.home_vivid_mole_gaze()}
 </p>
 
 <form method="POST" class="max-w-2xl">
 	<div class="mb-6" class:isError={errors.givenName}>
 		<label
 			for="settings_givenName"
-			class="block mb-2 text-sm font-medium text-gray-900 dark:text-gray-300">Given Name</label
+			class="block mb-2 text-sm font-medium text-gray-900 dark:text-gray-300"
+			>{m.bright_swift_eagle_given()}</label
 		>
 		<input
 			type="text"
@@ -41,7 +42,7 @@
 			autocomplete="given-name"
 			name="givenName"
 			class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500"
-			placeholder="My Org"
+			placeholder={m.lime_placeholder_communityname_gecko()}
 			bind:value={formData.givenName}
 			required
 		/>
@@ -51,7 +52,8 @@
 	<div class="mb-6" class:isError={errors.familyName}>
 		<label
 			for="settings_familyName"
-			class="block mb-2 text-sm font-medium text-gray-900 dark:text-gray-300">Family Name</label
+			class="block mb-2 text-sm font-medium text-gray-900 dark:text-gray-300"
+			>{m.calm_steady_lynx_family()}</label
 		>
 		<input
 			type="text"
@@ -59,7 +61,7 @@
 			autocomplete="family-name"
 			name="familyName"
 			class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500"
-			placeholder="My Org"
+			placeholder={m.lime_placeholder_communityname_gecko()}
 			bind:value={formData.familyName}
 			required
 		/>
@@ -73,9 +75,9 @@
 		<table class="w-full text-sm text-left text-gray-500 dark:text-gray-400">
 			<thead class="text-xs text-gray-700 uppercase bg-gray-50 dark:bg-gray-700 dark:text-gray-400">
 				<tr>
-					<th scope="col" class="py-3 px-6"> Identifier </th>
-					<th scope="col" class="py-3 px-6"> Type </th>
-					<th scope="col" class="py-3 px-6"> Visibility </th>
+					<th scope="col" class="py-3 px-6"> {m.nice_active_giraffe_propel()} </th>
+					<th scope="col" class="py-3 px-6"> {m.warm_male_thrush_pout()} </th>
+					<th scope="col" class="py-3 px-6"> {m.clear_crazy_meerkat_nurture()} </th>
 				</tr>
 			</thead>
 			{#each data.session?.user?.identifiers ?? [] as identifier}
@@ -96,9 +98,9 @@
 							bind:value={formData.identifierVisibility}
 							class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500"
 						>
-							<option value="PUBLIC">Public</option>
-							<option value="COMMUNITY">Community members only</option>
-							<option value="PRIVATE">Private (admins only)</option>
+							<option value="PUBLIC">{m.short_deft_lemur_clasp()}</option>
+							<option value="COMMUNITY">{m.equal_small_dolphin_spur()}</option>
+							<option value="PRIVATE">{m.pink_last_marten_grin()}</option>
 						</select>
 					</td>
 				</tr>
@@ -107,14 +109,13 @@
 	</div>
 	<div>
 		<Heading level="h3" title="Badges and Credentials">
-			Who can see the badges you've earned by default? You can choose to override this for each
-			individual badge.
+			{m.best_sweet_termite_work()}
 		</Heading>
 		<div class="mb-6" class:isError={errors.givenName}>
 			<label
 				for="settings_defaultVisibility"
 				class="block mb-2 text-sm font-medium text-gray-900 dark:text-gray-300"
-				>Default badge visibility</label
+				>{m.direct_plane_boar_succeed()}</label
 			>
 			<select
 				id="settings_defaultVisibility"
@@ -122,13 +123,13 @@
 				bind:value={formData.defaultVisibility}
 				class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500"
 			>
-				<option value="PUBLIC">Public</option>
-				<option value="COMMUNITY">Community members only</option>
-				<option value="PRIVATE">Private (admins only)</option>
+				<option value="PUBLIC">{m.short_deft_lemur_clasp()}</option>
+				<option value="COMMUNITY">{m.equal_small_dolphin_spur()}</option>
+				<option value="PRIVATE">{m.pink_last_marten_grin()}</option>
 			</select>
 			{#if errors.name}<p class="mt-2 text-sm text-red-600 dark:text-red-500">{errors.name}</p>{/if}
 		</div>
 
-		<Button buttonType="submit" submodule="primary">Save</Button>
+		<Button buttonType="submit" submodule="primary">{m.quick_safe_deer_save()}</Button>
 	</div>
 </form>

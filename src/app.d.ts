@@ -5,6 +5,7 @@
 // and what to do when importing types
 
 declare namespace App {
+	// Models
 	interface UserData {
 		id: string;
 		givenName: string?;
@@ -22,26 +23,61 @@ declare namespace App {
 		valid: boolean;
 	}
 
-	interface Organization {
-		id: string;
-		createdAt: Date;
-		name: string;
-		description: string;
-		domain: string;
-		url: string?;
-		email: string;
-		primaryColor: string?;
-		logo: string?;
-	}
+	type OrgStatus = 'ENABLED' | 'SUSPENDED' | 'UNDER_REVIEW' | 'PENDING';
+
+	type TransactionServiceOrgConfig = {
+		url: string;
+		tenantName: string;
+		encryptedApiKey: string; // "v1:base64(iv ‖ tag ‖ ciphertext)"
+		apiKeyUpdatedAt: string;
+	};
+
+	type IssuerSelection =
+		| { type: 'signingKey'; signingKeyId: string }
+		| { type: 'transactionService' };
+
+	type OrganizationConfigCommon = {
+		tagline?: string;
+		defaultLanguage?: (typeof import('$lib/i18n/runtime').locales)[number];
+		orgStatus?: OrgStatus;
+		permissions?: {
+			editAchievementCapability?: {
+				requiresAchievement: string | null;
+			};
+		};
+		issuer?: IssuerSelection;
+	};
+
+	type OrganizationConfig = import('@prisma/client').Prisma.JsonObject &
+		OrganizationConfigCommon & {
+			transactionService?: TransactionServiceOrgConfig;
+		};
+	type Organization = import('@prisma/client').Organization & {
+		json: OrganizationConfig;
+	};
+
+	type SanitizedTransactionServiceConfig = Omit<TransactionServiceOrgConfig, 'encryptedApiKey'> & {
+		apiKeyConfigured: boolean;
+	};
+
+	type SanitizedOrganizationConfig = import('@prisma/client').Prisma.JsonObject &
+		OrganizationConfigCommon & {
+			transactionService?: SanitizedTransactionServiceConfig;
+		};
+
+	type SanitizedOrganization = Omit<Organization, 'json'> & {
+		json: SanitizedOrganizationConfig;
+	};
+
 	interface Locals {
 		theme: string;
 		org: Organization;
 		token: string;
 		session: SessionData?;
-		locale: import('$lib/i18n/runtime').AvailableLanguageTag;
+		locale: (typeof import('$lib/i18n/runtime').locales)[number];
 	}
 	interface PageData {
-		org: Organization;
+		org: SanitizedOrganization;
 	}
 	interface Error {
 		message: string;
@@ -52,8 +88,24 @@ declare namespace App {
 		narrative?: string;
 	}
 
+	type AchievementConfigJson = import('@prisma/client').Prisma.JsonObject & {
+		capabilities: {
+			inviteRequires: string | null;
+		};
+		claimTemplate: string;
+	};
+	type AchievementConfig = import('@prisma/client').AchievementConfig & {
+		json: AchievementConfigJson;
+	};
+
+	interface ConfigWithRelations extends AchievementConfig {
+		claimRequires?: Achievement | null;
+		reviewRequires?: Achievement | null;
+	}
+
 	// Design System
 	type ButtonRole = 'primary' | 'secondary' | 'danger';
+	type NotificationLevel = 'info' | 'success' | 'warning' | 'error';
 
 	interface Evidence {
 		id?: string;
@@ -94,7 +146,7 @@ declare namespace App {
 				image?: string;
 			};
 		};
-		issuanceDate: string;
+		validFrom: string;
 		issuer: {
 			id: string;
 			type: string;
@@ -103,6 +155,17 @@ declare namespace App {
 			description: string;
 		};
 		evidence?: Evidence[];
+	}
+}
+
+declare global {
+	interface Window {
+		credentialHandlerPolyfill: {
+			loadOnce: () => Promise<void>;
+		};
+		WebCredential: {
+			new (type: string, data: any): Credential;
+		};
 	}
 }
 

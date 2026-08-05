@@ -8,6 +8,8 @@ import type { Session, User } from '@prisma/client';
 import stripTags from '$lib/utils/stripTags';
 import type { ClaimEndorsement } from '@prisma/client';
 import type { PageServerLoad } from './$types';
+import { INVITE_SESSION_VALIDITY_MS } from '$lib/utils/session';
+import { USE_SECURE_COOKIES } from '$env/static/private';
 
 dotenv.config();
 
@@ -16,7 +18,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 
 	// redirect user if logged in
 	if (locals.session) {
-		throw redirect(302, '/');
+		throw redirect(302, nextPath ?? '/');
 	}
 
 	const inviteId = url.searchParams.get('i');
@@ -26,7 +28,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 
 		// If invite is not found, doesn't match email, or is already claimed: Error
 		if (!invite || inviteeEmail != invite?.inviteeEmail || invite?.claimId)
-			throw error(404, m.invite_notFoundError());
+			throw error(404, m.curly_male_rabbit_lead());
 	}
 
 	return {
@@ -45,7 +47,7 @@ export const actions: Actions = {
 		const requestData = await request.formData();
 		const email = stripTags(requestData.get('email')?.toString());
 		const inviteId = stripTags(requestData.get('inviteId')?.toString());
-		if (!email || !email.toString().includes('@')) throw error(400, m.login_emailNotParsedError());
+		if (!email || !email.toString().includes('@')) throw error(400, m.each_pink_fish_grin());
 
 		// Validate org and ensure user exists
 		let userIdentifier = await prisma.identifier.findFirst({
@@ -63,9 +65,9 @@ export const actions: Actions = {
 		let outstandingInvite: ClaimEndorsement | null = null;
 		if (inviteId) {
 			outstandingInvite = await prisma.claimEndorsement.findUnique({ where: { id: inviteId } });
-			if (!outstandingInvite) throw error(400, m.login_invitationRequiredError());
+			if (!outstandingInvite) throw error(400, m.dark_deft_cow_march());
 		} else if (!userIdentifier) {
-			throw error(400, m.login_invitationRequiredError());
+			throw error(400, m.dark_deft_cow_march());
 		}
 
 		const code = Math.floor(100000 + Math.random() * 900000).toString();
@@ -82,15 +84,18 @@ export const actions: Actions = {
 		const emailResult = await sendOrcaMail({
 			from: locals.org.email,
 			to: email,
-			subject: m.login_toCommunityNameCTA({ orgName: locals.org.name }),
-			text: m.login_emailVerificationCodeIs({ code })
+			subject: m.active_antsy_panther_view({ orgName: locals.org.name }),
+			text: m.alert_soft_honeybadger_lead({ code })
 		});
 		if (!emailResult.success) {
-			throw error(500, m.email_transmissionError({ message: emailResult.error?.message ?? '' }));
+			throw error(
+				500,
+				m.moving_true_panther_delight({ message: emailResult.error?.message ?? '' })
+			);
 		}
 
 		cookies.set('sessionId', session.id, {
-			secure: process.env.USE_SECURE_COOKIES == 'true',
+			secure: USE_SECURE_COOKIES == 'true',
 			path: '/',
 			expires: session.expiresAt,
 			httpOnly: true
@@ -114,7 +119,7 @@ export const actions: Actions = {
 		const sessionId = cookies.get('sessionId');
 		const nextPath = requestData.get('nextPath')?.toString();
 
-		if (!vcode) throw error(400, m.login_verificationCodeRequiredError());
+		if (!vcode) throw error(400, m.funny_serious_mouse_nurture());
 		// Validate sessionid and ensure code matches
 		// TODO: use unique indexed query for session somehow
 		// TODO: prevent brute force guessing
@@ -130,7 +135,7 @@ export const actions: Actions = {
 				invite: true
 			}
 		});
-		if (!session) throw error(401, m.login_incorrectCodeError());
+		if (!session) throw error(401, m.alert_tired_ray_march());
 
 		// Advance user to next step in invite claim: user account creation.
 		if (!session.userId && session.invite?.inviteeEmail) return { success: true, register: true };
@@ -181,30 +186,57 @@ export const actions: Actions = {
 		const requestData = await request.formData();
 		const vcode = requestData.get('verificationCode')?.toString();
 		const sessionId = cookies.get('sessionId');
+		const inviteId = requestData.get('inviteId')?.toString();
 		const givenName = stripTags(requestData.get('givenName')?.toString()) || '';
 		const familyName = stripTags(requestData.get('familyName')?.toString()) || '';
 		const agreeTerms = stripTags(requestData.get('agreeTerms')?.toString()) || 'no';
 
-		if (!vcode) throw error(400, m.login_incorrectCodeError());
-		if (agreeTerms == 'no') throw error(400, m.login_agreeTermsError());
+		if (!vcode && !inviteId) throw error(400, m.alert_tired_ray_march());
+		if (agreeTerms == 'no') throw error(400, m.brave_weary_ostrich_visit());
 
-		// Validate sessionid and ensure code matches
-		// TODO: use unique indexed query for session somehow
-		// TODO: prevent brute force guessing
-		const session = await prisma.session.findFirst({
-			where: {
-				code: vcode,
-				id: sessionId,
-				organizationId: locals.org.id
-			},
-			include: {
-				invite: true
+		let session;
+		let currentInvite;
+		// TODO there's more to this conditional
+		if (inviteId && !sessionId) {
+			currentInvite = await prisma.claimEndorsement.findFirst({
+				where: {
+					organizationId: locals.org.id,
+					id: inviteId
+				}
+			});
+			// If the invite is no longer fresh, it is valid to confirm control of the email it was sent to.
+			if (
+				currentInvite?.createdAt &&
+				Date.now() > currentInvite.createdAt.getTime() + INVITE_SESSION_VALIDITY_MS
+			) {
+				// User will be required to login by email if their invite is stale.
+				throw error(401, { message: m.quick_clear_owl_unauth(), code: 'invite_expired' });
 			}
-		});
-		if (!session) throw error(401, m.login_incorrectCodeError());
+		}
 
-		if (session.userId || !session.invite?.inviteeEmail)
-			throw error(401, m.register_genericError());
+		if (!currentInvite) {
+			// Validate sessionid and ensure code matches
+			// TODO: use unique indexed query for session somehow
+			// TODO: prevent brute force guessing
+			session = await prisma.session.findFirst({
+				where: {
+					code: vcode,
+					id: sessionId,
+					organizationId: locals.org.id
+				},
+				include: {
+					invite: true
+				}
+			});
+
+			if (!session) throw error(401, m.alert_tired_ray_march());
+
+			if (session.userId || !session.invite?.inviteeEmail)
+				throw error(401, m.kind_cuddly_bat_clasp());
+		}
+
+		const userEmail = currentInvite?.inviteeEmail ?? session?.invite?.inviteeEmail;
+		if (!userEmail) throw error(400, m.kind_cuddly_bat_clasp());
 
 		const user = await prisma.user.create({
 			data: {
@@ -215,45 +247,81 @@ export const actions: Actions = {
 					create: [
 						{
 							type: 'EMAIL',
-							identifier: session.invite?.inviteeEmail,
+							identifier: userEmail,
 							organization: { connect: { id: locals.org.id } },
 							verifiedAt: new Date()
 						}
 					]
+				},
+				...(sessionId
+					? {}
+					: {
+							sessions: {
+								create: [
+									{
+										code: '',
+										expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+										organization: { connect: { id: locals.org.id } },
+										valid: true
+									}
+								]
+							}
+						})
+			},
+			include: {
+				sessions: true
+			}
+		});
+
+		if (sessionId) {
+			const activatedSession = await prisma.session.update({
+				where: {
+					id: sessionId
+				},
+				data: {
+					valid: true,
+					user: { connect: { id: user.id } }
+				},
+				select: {
+					user: true,
+					id: true,
+					createdAt: false,
+					expiresAt: true,
+					code: false,
+					invite: true,
+					inviteId: true,
+					organizationId: true,
+					valid: true
 				}
-			}
+			});
+
+			const invite = activatedSession.invite;
+
+			if (invite?.achievementId && invite) {
+				return {
+					session: activatedSession,
+					location: `/achievements/${invite.achievementId}/claim?i=${
+						invite.id
+					}&e=${encodeURIComponent(invite.inviteeEmail ?? '')}`
+				};
+			} else return { session: activatedSession, location: '/' };
+		}
+
+		const currentSession = user.sessions[0];
+		cookies.set('sessionId', currentSession.id, {
+			secure: process.env.USE_SECURE_COOKIES == 'true',
+			path: '/',
+			expires: currentSession.expiresAt,
+			httpOnly: true
 		});
 
-		const activatedSession = await prisma.session.update({
-			where: {
-				id: sessionId
-			},
-			data: {
-				valid: true,
-				user: { connect: { id: user.id } }
-			},
-			select: {
-				user: true,
-				id: true,
-				createdAt: false,
-				expiresAt: true,
-				code: false,
-				invite: true,
-				inviteId: true,
-				organizationId: true,
-				valid: true
-			}
-		});
-
-		const invite = activatedSession.invite;
-
-		if (invite?.achievementId && invite) {
-			return {
-				session: activatedSession,
-				location: `/achievements/${invite.achievementId}/claim?i=${
-					invite.id
-				}&e=${encodeURIComponent(invite.inviteeEmail ?? '')}`
-			};
-		} else return { session: activatedSession, location: '/' };
+		return {
+			session: { ...currentSession, user },
+			location: currentInvite
+				? `/achievements/${currentInvite.achievementId}/claim?i=${
+						currentInvite.id
+					}&e=${encodeURIComponent(currentInvite.inviteeEmail ?? '')}`
+				: '/'
+		};
 	}
 };

@@ -1,4 +1,7 @@
 import * as yup from 'yup';
+import { locales } from '$lib/i18n/runtime';
+
+const availableLanguageTagsArray = [...locales];
 
 export const formSchema = yup.object().shape({
 	name: yup.string().required(),
@@ -11,5 +14,7 @@ export const formSchema = yup.object().shape({
 	logo: yup
 		.string()
 		.matches(/\.(svg|png)$/)
-		.nullable()
+		.nullable(),
+	tagline: yup.string().nullable(),
+	defaultLanguage: yup.string().oneOf(availableLanguageTagsArray).nullable()
 });

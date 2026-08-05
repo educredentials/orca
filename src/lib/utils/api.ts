@@ -1,15 +1,20 @@
 import { arrayOf } from '$lib/utils/arrayOf';
 import type { PaginationData } from './pagination';
 import { error, json } from '@sveltejs/kit';
-import Link from 'http-link-header';
+
+export type ApiAwardMeta = {
+	created: boolean;
+	invited: boolean;
+	claimId?: string | null;
+	endorsementId?: string | null;
+};
 
 type ApiMetaInput = PaginationData & {
 	type: string;
-	page: number;
-	pageSize: number;
 	totalCount?: number;
 	totalPages?: number;
 	getTotalCount?: () => Promise<number>;
+	award?: ApiAwardMeta;
 };
 type ApiInput<T> = {
 	data: T | T[];
@@ -25,6 +30,7 @@ interface V1ApiMeta {
 	pageSize: number;
 	totalPages?: number;
 	totalCount?: number;
+	award?: ApiAwardMeta;
 }
 type V1ApiEnvelope<T> = {
 	data: T[];
@@ -37,7 +43,7 @@ type ApiFunction<T> = (d: ApiInputWithParams<T>) => Promise<Response>;
 /**
  * Augments V1 envelope with total pagecount
  */
-const v1: V1ApiFunction<{ id: string }> = async ({ data, meta }) => {
+const v1: V1ApiFunction<Partial<{ id: string }>> = async ({ data, meta }) => {
 	const result = arrayOf(data);
 
 	return {
@@ -53,10 +59,11 @@ const v1MetaWithRequestedCounts = async (
 	currentResultCount: number,
 	meta: ApiMetaInput
 ): Promise<V1ApiMeta> => {
-	const base = {
+	const base: V1ApiMeta = {
 		type: meta.type,
 		page: meta.page,
-		pageSize: meta.pageSize
+		pageSize: meta.pageSize,
+		...(meta.award !== undefined ? { award: meta.award } : {})
 	};
 	if (!meta.includeCount) return base;
 
@@ -90,7 +97,7 @@ const v1MetaWithRequestedCounts = async (
 /**
  * Returns API Response for the desired API version
  */
-export const apiResponse: ApiFunction<{ id: string }> = async ({ params, data, meta }) => {
+export const apiResponse: ApiFunction<Partial<{ id: string }>> = async ({ params, data, meta }) => {
 	if (params.version === 'v1') return json(await v1({ data, meta }));
 	throw error(500, 'Unsupported API version');
 };

@@ -4,7 +4,8 @@ import { error, redirect } from '@sveltejs/kit';
 import { prisma } from '$lib/../prisma/client';
 
 import { getAchievement } from '$lib/data/achievement';
-import { getUserClaim } from '$lib/data/achievementClaim';
+import { getUserClaim, getValidUserClaim } from '$lib/data/achievementClaim';
+import { isExchangeEnabled } from '$lib/server/transactionService/config';
 
 const throwRedirect = (url: URL) => {
 	throw redirect(307, `${url}/public`);
@@ -18,7 +19,8 @@ export const load: PageServerLoad = async ({ locals, params, url }) => {
 		include: { user: true }
 	});
 
-	if (!claim || claim.organizationId != locals.org.id) throw error(404, m.claim_notFoundError());
+	if (!claim || claim.organizationId != locals.org.id)
+		throw error(404, m.best_sharp_lamb_enchant());
 
 	const achievement = await getAchievement(claim.achievementId, locals.org.id);
 	const config = achievement.achievementConfig;
@@ -42,7 +44,7 @@ export const load: PageServerLoad = async ({ locals, params, url }) => {
 	// have a claim.
 	const prerequisiteClaim =
 		!claim && config?.claimable && config?.claimRequiresId && locals.session?.user.id
-			? await getUserClaim(locals.session?.user.id, config?.claimRequiresId, locals.org.id)
+			? await getValidUserClaim(locals.session?.user.id, config?.claimRequiresId, locals.org.id)
 			: null;
 
 	return {
@@ -52,6 +54,7 @@ export const load: PageServerLoad = async ({ locals, params, url }) => {
 		hasProvidedEndorsement,
 		endorsementCount,
 		user: locals.session?.user,
-		prerequisiteClaim
+		prerequisiteClaim,
+		exchangeEnabled: isExchangeEnabled(locals.org)
 	};
 };

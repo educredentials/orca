@@ -4,7 +4,6 @@
 	import AchievementSummary from '$lib/components/achievement/AchievementSummary.svelte';
 	import Breadcrumbs from '$lib/components/Breadcrumbs.svelte';
 	import type { PageData } from './$types';
-	import Backpack from '$lib/illustrations/Backpack.svelte';
 	import Button from '$lib/components/Button.svelte';
 	import Heading from '$lib/components/Heading.svelte';
 	import MarkdownRender from '$lib/components/MarkdownRender.svelte';
@@ -18,16 +17,22 @@
 	};
 
 	$: {
-		if (form) endorsementJson = JSON.parse(form?.endorsement?.json ?? '{}');
+		if (form && form.endorsement) {
+			const endorsement = form.endorsement as any;
+			if ('json' in endorsement && typeof endorsement.json === 'string') {
+				endorsementJson = JSON.parse(endorsement.json);
+			} else {
+				endorsementJson = {};
+			}
+		}
 	}
 
 	let awardNarrative = '';
-	let forceCreateUser = false;
 
 	const breadcrumbItems = [
-		{ text: 'Home', href: '/' },
-		{ text: 'Achievements', href: '/achievements' },
-		{ text: data.achievement.name }
+		{ text: m.each_fluffy_fox_view(), href: '/' },
+		{ text: m.antsy_grand_rabbit_gaze(), href: '/achievements' },
+		{ text: data.achievement?.name, href: `/achievements/${data.achievement.id}` }
 	];
 </script>
 
@@ -36,52 +41,49 @@
 	{#if form}
 		<!-- Result of form submission: a new Endorsement or a previous one-->
 		<h3 class="mb-2 text-2xl font-bold tracking-tight text-gray-900 dark:text-white">
-			{m.awardedBadge()}
+			{m.warm_tangy_deer_awarded()}
 		</h3>
 
 		<AchievementSummary achievement={data.achievement} linkAchievement={false} />
 
-		{#if form.status?.selfClaim}
+		{#if form.selfClaim}
 			<p class="mt-4 mb-8 text-sm text-gray-500 dark:text-gray-400">
-				{m.achievement_youHaveClaimed_description()}
+				{m.patchy_silly_guppy_jump()}
 				<a
-					href={`/claims/${form.claim?.id}`}
+					href={`/claims/${form.endorsement?.claim?.id}`}
 					class="text-blue-700 text-underline hover:no-underline"
 				>
-					{m.claim_viewCTA()}
+					{m.best_teary_shrimp_pause()}
 				</a>
 			</p>
-		{:else if form.status?.invited}
+		{:else if form.invited}
 			<p class="mt-1 mb-8 text-sm text-gray-500 dark:text-gray-400">
-				{m.claim_youHaveInvited({
-					inviteeEmail: form.endorsement?.inviteeEmail
+				{m.great_swift_penguin_link({
+					inviteeEmail: form.endorsement?.inviteeEmail ?? ''
 				})}
 			</p>
 		{:else}
 			<p class="mt-1 mb-8 text-sm text-gray-500 dark:text-gray-400">
-				{m.claim_youHaveAwarded({
-					givenName: form.identifier?.user?.givenName,
-					familyName: form.identifier?.user?.familyName
+				{m.petty_lucky_termite_view({
+					givenName: form.identifier?.user?.givenName ?? 'another',
+					familyName: form.identifier?.user?.familyName ?? 'user'
 				})}
 			</p>
 		{/if}
 
-		{#if !form.status?.selfClaim && form.status?.created === false}
-			<Alert
-				message="You already recommended this person for this achievement. Previous data is shown below."
-				level="warning"
-			/>
+		{#if !form.selfClaim && form.created === false}
+			<Alert message={m.trick_sad_dog_read()} level="warning" />
 		{/if}
 
 		{#if form.endorsement}
 			<div class="mb-4">
 				<p class="max-w-2xl mt-3 text-sm text-gray-800 dark:text-gray-400">
-					<span class="font-bold">{m.status_created()}:</span>
+					<span class="font-bold">{m.sharp_silly_hound_dart()}:</span>
 					{form.endorsement?.createdAt}
 				</p>
 				{#if endorsementJson?.narrative}
 					<p class="font-bold max-w-2xl mt-3 text-sm text-gray-800 dark:text-gray-400">
-						{m.narrative()}:
+						{m.fancy_flat_kite_relish()}:
 					</p>
 					<p class="max-w-2xl mt-3 text-sm text-gray-800 dark:text-gray-400">
 						<MarkdownRender value={endorsementJson.narrative} />
@@ -89,7 +91,7 @@
 				{/if}
 				{#if endorsementJson?.id}
 					<p class="max-w-2xl mt-3 text-sm text-gray-800 dark:text-gray-400">
-						<span class="font-bold">{m.evidenceURL()}:</span>
+						<span class="font-bold">{m.calm_steady_lynx_evidence()}:</span>
 						<a href={endorsementJson.id} class="text-blue-700 text-underline hover:no-underline">
 							{endorsementJson.id}
 						</a>
@@ -100,7 +102,7 @@
 
 		<div class="flex gap-1">
 			<Button
-				text={m.achievement_awardAnotherCTA()}
+				text={m.equal_petty_panther_file()}
 				submodule="secondary"
 				on:click={() => {
 					form = null;
@@ -110,33 +112,45 @@
 		</div>
 	{:else}
 		<!-- Submission form -->
-		<Heading title={m.awardBadgeCTA()} description={m.awardBadgeCTA_description()} />
+		<Heading
+			title={m.gentle_brave_falcon_award()}
+			description={m.sharp_quiet_panther_awarddesc()}
+		/>
+
+		<p class="mb-4 text-sm">
+			<a
+				href="/achievements/{data.achievement.id}/award/bulk"
+				class="text-blue-700 hover:underline"
+			>
+				{m.warm_calm_otter_bulk()}
+			</a>
+		</p>
 
 		<AchievementSummary achievement={data.achievement} />
 
 		<form method="POST" class="mt-4">
 			<div class="mb-6">
 				<label for="email" class="block mb-2 text-sm font-medium text-gray-900 dark:text-gray-300"
-					>{m.award_recipientEmail()}</label
+					>{m.direct_top_giraffe_login()}</label
 				>
 				<input
 					type="email"
 					id="email"
 					name="email"
 					class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500"
-					placeholder="name@mycommunity.com"
+					placeholder={m.few_seemly_mare_propel()}
 					required
 				/>
 			</div>
 
 			<div class="mb-6">
 				<p class="mb-3 text-sm text-gray-500 dark:text-gray-400">
-					{m.award_narrative_description()}
+					{m.lower_house_bat_propel()}
 				</p>
 				<label
 					for="narrative"
 					class="block mb-2 text-sm font-medium text-gray-900 dark:text-gray-300"
-					>{m.achievement_narrative()}</label
+					>{m.patchy_crazy_marten_march()}</label
 				>
 				{#if data.achievement.criteriaNarrative}
 					<p class="max-w-2xl my-4 text-sm text-gray-500 dark:text-gray-400">
@@ -147,16 +161,16 @@
 					id="narrative"
 					name="narrative"
 					class="hidden"
-					placeholder={m.award_narrative_placeholder()}
+					placeholder={m.elegant_soft_oryx_read()}
 					bind:value={awardNarrative}
 				/>
-				<MarkdownEditor bind:value={awardNarrative} />
+				<MarkdownEditor bind:value={awardNarrative} inputName="narrative" />
 			</div>
 			<div class="mb-6">
 				<label
 					for="evidenceUrl"
 					class="block mb-2 text-sm font-medium text-gray-900 dark:text-gray-300"
-					>{m.evidenceURL()}</label
+					>{m.calm_steady_lynx_evidence()}</label
 				>
 				<input
 					type="text"
@@ -167,63 +181,10 @@
 				/>
 			</div>
 
-			<div class="mb-6">
-				<div class="flex items-center">
-					<input
-						id="forceCreateUser"
-						type="checkbox"
-						name="forceCreateUser"
-						bind:checked={forceCreateUser}
-						class="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 dark:focus:ring-blue-600 dark:ring-offset-gray-800 focus:ring-2 dark:bg-gray-700 dark:border-gray-600"
-					/>
-					<label
-						for="forceCreateUser"
-						class="ml-2 text-sm font-medium text-gray-900 dark:text-gray-300"
-					>
-						{m.award_createUserIfNotExistsOption()}
-					</label>
-				</div>
-			</div>
-
-			{#if forceCreateUser}
-				<div class="mb-6">
-					<label
-						for="register_givenName"
-						class="block mb-2 text-sm font-medium text-gray-900 dark:text-gray-300"
-					>
-						{m.givenName()}
-					</label>
-					<input
-						type="text"
-						id="register_givenName"
-						name="givenName"
-						class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500"
-						placeholder="Alice"
-						required
-					/>
-				</div>
-
-				<div class="mb-6">
-					<label
-						for="register_familyName"
-						class="block mb-2 text-sm font-medium text-gray-900 dark:text-gray-300"
-					>
-						{m.familyName()}
-					</label>
-					<input
-						type="text"
-						id="register_familyName"
-						name="familyName"
-						class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500"
-						required
-					/>
-				</div>
-			{/if}
-
 			<button
 				type="submit"
 				class="text-white bg-blue-700 hover:bg-blue-800 focus:ring-4 focus:outline-none focus:ring-blue-300 font-medium rounded-lg text-sm w-full sm:w-auto px-5 py-2.5 text-center dark:bg-blue-600 dark:hover:bg-blue-700 dark:focus:ring-blue-800"
-				>{m.submitCTA()}</button
+				>{m.bold_swift_eagle_submit()}</button
 			>
 		</form>
 	{/if}

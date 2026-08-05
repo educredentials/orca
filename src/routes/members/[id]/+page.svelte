@@ -1,5 +1,6 @@
 <script lang="ts">
 	import * as m from '$lib/i18n/messages';
+	import { imageUrl } from '$lib/utils/imageUrl';
 	import { page } from '$app/stores';
 	import Button from '$lib/components/Button.svelte';
 	import Modal from '$lib/components/Modal.svelte';
@@ -10,6 +11,8 @@
 	import type { PageData } from './$types';
 	import { PUBLIC_HTTP_PROTOCOL } from '$env/static/public';
 
+	import Card from '$lib/components/Card.svelte';
+	import Ribbon from '$lib/illustrations/Ribbon.svelte';
 	export let data: PageData;
 	let member = data.member;
 	let showShareModal = false;
@@ -20,42 +23,42 @@
 		{member.givenName}
 		{member.familyName}
 		{#if member.orgRole}
-			<Tag>{m.adminRoleLabel()}</Tag>
+			<Tag>{m.sharp_clear_fox_admin()}</Tag>
 		{/if}
 	</h1>
 	<div class="inline-flex items-center">
 		{#if member.id == data.session?.user?.id}
 			<Button
-				text={m.share()}
+				text={m.happy_sparse_lemur_clasp()}
 				submodule="secondary"
 				on:click={() => {
 					showShareModal = true;
 				}}
 			/>
-			<Button href={`/settings`} submodule="secondary" text={m.profile_editCTA()} />
+			<Button href={`/settings`} submodule="secondary" text={m.quiet_warm_dog_soar()} />
 		{/if}
 	</div>
 </div>
 <p class="mt-1 mb-8 text-sm text-gray-500 dark:text-gray-400">
 	{#if member.id == data.session?.user?.id}
-		{m.member_yourProfileGreeting()}
+		{m.merry_bright_rabbit_bask()}
 	{:else}
-		{m.member_otherUserProfileDescription()}
+		{m.red_wide_jackdaw_drip()}
 	{/if}
 </p>
 
 {#if member.identifiers.length}
 	<h3 class="text-2xl sm:text-3xl font-bold mb-4 dark:text-white">
 		{#if member.identifiers.length == 1}
-			1 {m.identifierListLabel()}
+			1 {m.calm_steady_lynx_identifier()}
 		{:else}
-			{member.identifiers.length} {m.identifierListLabel_other()}
+			{member.identifiers.length} {m.bright_happy_sparrow_identifier()}
 		{/if}
 	</h3>
 	{#each member.identifiers as identifier}
 		<p class="mb-3 font-normal text-gray-700 dark:text-gray-400">
 			{identifier.type}: {identifier.identifier}
-			{#if identifier.verifiedAt}({m.status_verified()}){/if}
+			{#if identifier.verifiedAt}({m.sad_vivid_myna_visit()}){/if}
 		</p>
 	{/each}
 {/if}
@@ -63,35 +66,57 @@
 {#if member._count.receivedAchievementClaims}
 	<h3 class="text-2xl sm:text-3xl font-bold mb-4 dark:text-white">
 		{member._count.receivedAchievementClaims}
-		{member._count.receivedAchievementClaims == 1 ? m.badge_one() : m.badge_other()}
+		{member._count.receivedAchievementClaims == 1
+			? m.late_antsy_pug_grin()
+			: m.soft_dense_boar_drip()}
 	</h3>
 	<Pagination
 		paging={{ ...calculatePageAndSize($page.url), count: member._count.receivedAchievementClaims }}
 	/>
-	{#each member.receivedAchievementClaims as claim}
-		<p class="mb-3 font-normal text-gray-700 dark:text-gray-400">
-			<a
-				href={`/claims/${claim.id}`}
-				class="text-blue-700 dark:text-blue-400 font-bold underline hover:no-underline"
-				>{claim.achievement.name}</a
-			>
-		</p>
-		<p class="mb-3 font-normal text-gray-700 dark:text-gray-400">
-			{m.status_created()}: {claim.createdOn}
-		</p>
-	{/each}
+
+	<div class="grid grid-cols-[repeat(auto-fill,minmax(400px,1fr))] gap-4">
+		{#each member.receivedAchievementClaims as claim}
+			<Card maxWidth="" hoverEffect={true} href="/claims/{claim.id}">
+				<div class="grid grid-cols-4 gap-2">
+					<div class="m-auto">
+						{#if claim.achievement.image}
+							<img
+								src={imageUrl(claim.achievement.image)}
+								alt={m.dull_bright_ostrich_delight({ achievementName: claim.achievement.name })}
+								aria-hidden
+							/>
+						{:else}
+							<div class="text-gray-400 dark:text-gray-700">
+								<Ribbon />
+							</div>
+						{/if}
+					</div>
+
+					<div class="col-span-3">
+						<h3 class="mb-2 text-base font-bold tracking-tight text-gray-900 dark:text-white">
+							{claim.achievement.name}
+						</h3>
+
+						<p class="mb-3 text-xs font-normal text-gray-700 dark:text-gray-400">
+							{m.sharp_silly_hound_dart()}: {claim.createdOn}
+						</p>
+					</div>
+				</div>
+			</Card>
+		{/each}
+	</div>
 {/if}
 
 {#if member.id == data.session?.user?.id}
 	<Modal
 		visible={showShareModal}
-		title={m.share()}
+		title={m.happy_sparse_lemur_clasp()}
 		on:close={() => {
 			showShareModal = false;
 		}}
 		actions={[
 			{
-				label: m.share_copyUrl(),
+				label: m.lucky_tired_mole_ask(),
 				buttonType: 'button',
 				submodule: 'secondary',
 				onClick: (e) => {
@@ -100,7 +125,7 @@
 					}
 					const url = `${PUBLIC_HTTP_PROTOCOL}://${data.org.domain}/members/${member.id}`;
 					navigator.clipboard.writeText(url);
-					console.log(m.claim_shareUrlCopied() + url);
+					console.log(m.dense_cool_owl_nurture() + url);
 					e.preventDefault();
 					e.stopPropagation();
 				}
@@ -108,11 +133,11 @@
 		]}
 	>
 		<p class="text-sm text-gray-500 dark:text-gray-400">
-			{m.member_share_description()}
+			{m.slow_dense_scallop_startle()}
 		</p>
 		<QRCode
 			url={`${PUBLIC_HTTP_PROTOCOL}://${data.org.domain}/members/${member.id}`}
-			alt={m.share_qrCodeImageAltText()}
+			alt={m.plane_light_fish_view()}
 		/>
 	</Modal>
 {/if}

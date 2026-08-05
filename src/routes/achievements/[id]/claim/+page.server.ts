@@ -1,16 +1,12 @@
 import * as m from '$lib/i18n/messages';
-import type { PageServerLoad, Actions } from './$types';
 import { error, redirect } from '@sveltejs/kit';
 import { prisma } from '$lib/../prisma/client';
 import type { Prisma } from '@prisma/client';
 import { ClaimStatus, type Identifier } from '@prisma/client';
 import stripTags from '$lib/utils/stripTags';
-import { ValidationError } from 'yup';
-import { achievementFormSchema } from '$lib/data/achievementForm';
 import { getAchievement } from '$lib/data/achievement';
-import { getUserClaim } from '$lib/data/achievementClaim';
-import type { AchievementClaim, AchievementCredential, ClaimEndorsement } from '@prisma/client';
-import { inviteId } from '$lib/stores/activeClaimStore';
+import { getUserClaim, getValidUserClaim } from '$lib/data/achievementClaim';
+import type { AchievementClaim, ClaimEndorsement } from '@prisma/client';
 
 export const load = async ({ locals, params, url }) => {
 	const inviteId = url.searchParams.get('i');
@@ -29,14 +25,15 @@ export const load = async ({ locals, params, url }) => {
 	if (inviteId && inviteeEmail) {
 		invite = await prisma.claimEndorsement.findUnique({ where: { id: inviteId } });
 		if (invite && invite?.inviteeEmail != inviteeEmail)
-			throw error(403, m.claim_invitationInvalidError());
+			throw error(403, m.sharp_crazy_boar_climb());
+		if (invite?.organizationId != locals.org.id) throw error(404, 'Invitation not found');
 	}
 
 	// If this badge requires a member to hold another badge, get the relevant claim for that badge.
 	// If they have it, they are eligible to claim this badge.
 	const requiredBadgeClaim =
 		config?.claimable && config?.claimRequiresId && locals.session?.user?.id
-			? await getUserClaim(locals.session?.user.id, config?.claimRequiresId, locals.org.id)
+			? await getValidUserClaim(locals.session?.user.id, config?.claimRequiresId, locals.org.id)
 			: null;
 
 	return {
@@ -46,15 +43,16 @@ export const load = async ({ locals, params, url }) => {
 		existingBadgeClaim,
 		requiredBadgeClaim,
 		inviteId,
-		inviteeEmail
+		inviteeEmail,
+		inviteCreatedAt: invite?.createdAt
 	};
 };
 
 export const actions = {
 	// The authenticated user claims a badge
-	claim: async ({ locals, cookies, request, params }) => {
+	claim: async ({ locals, request, params }) => {
 		if (!locals.session?.user) {
-			throw error(401, m.claim_unauthenticatedError());
+			throw error(401, m.smooth_bad_goat_cook());
 		}
 
 		const achievement = await getAchievement(params.id, locals.org.id);
@@ -74,26 +72,26 @@ export const actions = {
 		if (userEmails.length && inviteId) {
 			invite = await prisma.claimEndorsement.findUnique({ where: { id: inviteId } });
 			if (invite && invite?.achievementId != params.id)
-				throw error(403, m.claim_invitationInvalidError());
+				throw error(403, m.sharp_crazy_boar_climb());
 			else if (invite && !userEmails.includes(invite.inviteeEmail))
-				throw error(403, m.claim_invitationEmailReconciliationError());
+				throw error(403, m.soft_bright_robin_link());
 		}
 
-		if (!invite && !config?.claimable) throw error(400, m.claim_achievementNotClaimableError());
+		if (!invite && !config?.claimable) throw error(400, m.clear_weary_guppy_support());
 
 		// get required badge claim if the user needs one
 		const requiredBadgeClaim =
 			config?.claimRequiresId && locals.session?.user.id && !invite
-				? await getUserClaim(locals.session.user.id, config?.claimRequiresId, locals.org.id)
+				? await getValidUserClaim(locals.session.user.id, config?.claimRequiresId, locals.org.id)
 				: null;
 
 		if (config?.claimRequiresId && !requiredBadgeClaim && !invite)
 			throw error(400, {
-				code: m.notFound(),
-				message: m.claim_userNotMeetsPrerequsiteError()
+				code: m.fresh_bright_sparrow_notfound(),
+				message: m.wide_patchy_marten_view()
 			});
 
-		let data: Prisma.AchievementClaimCreateInput = {
+		const data: Prisma.AchievementClaimCreateInput = {
 			organization: { connect: { id: locals.org.id } },
 			achievement: { connect: { id: params.id } },
 			user: { connect: { id: locals.session.user.id } },
@@ -131,22 +129,32 @@ export const actions = {
 		if (achievement.achievementConfig?.reviewRequiresId) {
 			const reviewerClaims = await prisma.achievementClaim.findMany({
 				where: {
-					userId: {
-						in: existingEndorsements
-							.map((ee) => ee.creatorId)
-							.flatMap((cid) => (cid !== null ? [cid] : []))
-						// or replace above 2 lines with the one below
-						// .map((ee) => ee.creatorId !== null ? [ee.creatorId]: []).flat(1)
+					AND: {
+						userId: {
+							in: existingEndorsements
+								.map((ee) => (ee.creatorId !== null ? [ee.creatorId] : []))
+								.flat(1)
+						},
+						achievementId: achievement.achievementConfig?.reviewRequiresId,
+						validFrom: { not: null }
 					},
-					achievementId: achievement.achievementConfig?.reviewRequiresId,
-					validFrom: { not: null },
-					validUntil: { not: null } // TODO: Adjust to be an OR so it's OK if a scheduled end date exists in the future.
+					OR: [{ validUntil: null }, { validUntil: { gt: new Date() } }]
 				}
 			});
 			const numReviewsRequired = achievement.achievementConfig.reviewsRequired ?? 1;
 			if (reviewerClaims?.length >= numReviewsRequired) {
 				data.validFrom = new Date();
 			}
+		} else if (
+			achievement.achievementConfig?.reviewsRequired &&
+			achievement.achievementConfig.reviewsRequired > 0
+		) {
+			// Admin review required - check if current user is an admin
+			if (['GENERAL_ADMIN', 'CONTENT_ADMIN'].includes(locals.session?.user?.orgRole || 'none')) {
+				// Current user is an admin, so they can make the claim immediately valid
+				data.validFrom = new Date();
+			}
+			// If not an admin, validFrom remains undefined (claim will need admin endorsement)
 		} else {
 			// If review is not required, claim becomes valid immediately.
 			data.validFrom = new Date();
@@ -155,7 +163,7 @@ export const actions = {
 		const claim = await prisma.achievementClaim.create({ data });
 
 		// Get rid of any outstanding invites that were self-invites or unauthenticated
-		const pruneSelfInvites = await prisma.claimEndorsement.deleteMany({
+		await prisma.claimEndorsement.deleteMany({
 			where: {
 				OR: [
 					{
@@ -182,11 +190,11 @@ export const actions = {
 
 		throw redirect(303, `/claims/${claim.id}`);
 	},
-	updateClaim: async ({ locals, cookies, request, params }) => {
-		if (!locals.session?.user) throw error(401, m.claim_unauthenticatedError());
+	updateClaim: async ({ locals, request, params }) => {
+		if (!locals.session?.user) throw error(401, m.smooth_bad_goat_cook());
 
 		const existingClaim = await getUserClaim(locals.session?.user?.id, params.id, locals.org.id);
-		if (!existingClaim) throw error(401, m.claim_noExistingFoundError());
+		if (!existingClaim) throw error(401, m.legal_grand_goat_view());
 
 		const formData = await request.formData();
 		const claimStatus = formData.get('claimStatus')?.toString();
@@ -195,6 +203,33 @@ export const actions = {
 
 		let updatedClaim: AchievementClaim | null = null;
 		if (claimStatus == 'ACCEPTED') {
+			// Update validFrom if needed, based on the achievement's review rules and existing endorsements.
+			let { validFrom } = existingClaim;
+			if (!validFrom) {
+				const achievement = await getAchievement(params.id, locals.org.id);
+				if (achievement.achievementConfig?.reviewRequiresId) {
+					// If review is required, we find some reviews and check if they are enough.
+					const numReviewsRequired = achievement.achievementConfig?.reviewsRequired ?? 1;
+					const reviewerClaims = await prisma.achievementClaim.findMany({
+						where: {
+							AND: {
+								achievementId: achievement.achievementConfig?.reviewRequiresId,
+								validFrom: { not: null }
+							},
+							OR: [{ validUntil: null }, { validUntil: { gt: new Date() } }]
+						},
+						take: numReviewsRequired
+					});
+
+					if (reviewerClaims?.length >= numReviewsRequired) {
+						validFrom = new Date();
+					}
+				} else {
+					// If review is not required, claim becomes valid immediately.
+					validFrom = new Date();
+				}
+			}
+
 			updatedClaim = await prisma.achievementClaim.update({
 				where: {
 					userId_achievementId: {
@@ -204,6 +239,7 @@ export const actions = {
 				},
 				data: {
 					claimStatus,
+					validFrom,
 					json: JSON.stringify(
 						Object.fromEntries(
 							[
@@ -228,7 +264,7 @@ export const actions = {
 		}
 
 		// Get rid of a self-invitation if exists
-		const pruneSelfInvites = await prisma.claimEndorsement.deleteMany({
+		await prisma.claimEndorsement.deleteMany({
 			where: {
 				OR: [
 					{
@@ -253,7 +289,7 @@ export const actions = {
 			}
 		});
 		// TODO remove: this is failsafe code. It probably won't find anything, because gap at claim time was fixed.
-		const existingEndorsements = await prisma.claimEndorsement.updateMany({
+		await prisma.claimEndorsement.updateMany({
 			where: {
 				inviteeEmail: {
 					in: locals.session?.user?.identifiers

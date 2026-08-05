@@ -10,6 +10,7 @@ Features:
 - Peer endorsements, and qualified reviews by users who hold configurable reviewer badge
 - Internationalization (i18n) with supported locales `en-US`, `en-AU`, and `fr`.
 - Digital credentials wallet integration with CHAPI.
+- Optional wallet handoff via the [DCC Transaction Service](https://github.com/digitalcredentials/transaction-service) (per-organization opt-in). See `docs/plans/2026-04-21-transaction-service-exchanges/00-overview.md` for the design.
 
 Roadmap:
 
@@ -31,7 +32,7 @@ Instructions have been developed and tested on MacOS. A development environment 
 
 Prerequisites:
 
-- NodeJS (`lts/hydrogen` v18.x), NPM
+- Node.js (see `.nvmrc` for version, e.g. `lts/iron`). pnpm via Corepack.
 - A Postgres database which can be run locally on one of 2 ways:
   - Install PostgreSQL ([How to](https://www.moncefbelyamani.com/how-to-install-postgresql-on-a-mac-with-homebrew-and-lunchy/) install PostgreSQL on a Mac with Homebrew)
   - Install Docker (https://www.docker.com/products/docker-desktop/) and use the provided docker compose
@@ -46,7 +47,9 @@ Optional, but helpful enhancements:
   - [Prisma](https://marketplace.visualstudio.com/items?itemName=Prisma.prisma)
   - [Vitest](https://marketplace.visualstudio.com/items?itemName=ZixuanChen.vitest-explorer)
 
-Install dependencies with `npm install`.
+Enable Corepack (one-time setup): `corepack enable`
+
+Install dependencies with `pnpm install`.
 
 Create a database, schema, and an app-specific database user with a password.
 
@@ -65,16 +68,17 @@ Customize Environment file with `.env`. Initialize your environment file by copy
 
 - Populate `DATABASE_URL`.
 - Ensure that `PUBLIC_HTTP_PROTOCOL="http"` or `="https"` to ensure absolute URLs are properly generated.
+- Optionally configure footer links (`PUBLIC_PRIVACY_URL`, `PUBLIC_TERMS_URL`, `PUBLIC_CONTACT_URL`) - defaults to `/privacy`, `/terms`, `/contact` if not set. Supports both relative paths and absolute URLs.
 
-Migrate database: `npm run migrate:dev`
+Migrate database: `pnpm run migrate:dev`
 
-Create your organization: `npm run createOrganization`. Select an org domain like `localhost:5173` where the app will run. Do not include `http://` in the domain field.
+Create your organization: `pnpm run createOrganization`. Select an org domain like `localhost:5173` where the app will run. Do not include `http://` in the domain field. This should match `DEFAULT_ORG_DOMAIN` in your `.env` file.
 
-Create your admin: `npm run createAdmin`.
+Create your admin: `pnpm run createAdmin`.
 
-Create your keypair for the org: `npm run createKeypair`.
+Create your keypair for the org: `pnpm run createKeypair`.
 
-Start a development server: `npm run dev`. This will start up a webserver at `http://localhost:5173`. If you did the wildcard domain setup, it is also available at `http://orca.test:5173`. You may auto-open the app in a new browser tab with: `npm run dev -- --open`
+Start a development server: `pnpm run dev`. This will start up a webserver at `http://localhost:5173`. If you did the wildcard domain setup, it is also available at `http://orca.test:5173`. You may auto-open the app in a new browser tab with: `pnpm run dev -- --open`
 
 ## Media Storage
 
@@ -97,7 +101,7 @@ That is it, all media files will be saved to your local file system in the `dev-
 
 ### Using localstack to emulate S3
 
-You can use localstack to provide a local S3 interface using `docker compose --profile localstack up -d`. Then you can initialize the S3 buckets with `npm run createS3BucketLocalStack` (function is not exactly idempotent, but is safe to call multiple times in effect) **There are a few caveats to using localstack though, read below!**
+You can use localstack to provide a local S3 interface using `docker compose --profile localstack up -d`. Then you can initialize the S3 buckets with `pnpm run createS3BucketLocalStack` (function is not exactly idempotent, but is safe to call multiple times in effect) **There are a few caveats to using localstack though, read below!**
 
 When bringing down the stack remember to specify the profile e.g. `docker compose --profile localstack down`
 
@@ -113,7 +117,7 @@ The local pod stuff can be summarized as follows:
 
 Debugging server side code is possible via `vavite/node-loader` as described in this article: https://www.codelantis.com/blog/sveltekit-server-debugging-vscode-webstorm.
 
-It uses the npm script target `debug-dev`. The launch configuration for this in VSCode is "Debug via NPM" and should be selected from the Run and Debug menu.
+It uses the pnpm script target `debug-dev`. The launch configuration for this in VSCode is "Debug via pnpm" and should be selected from the Run and Debug menu.
 
 This code (and the dev dependency on vavite/node-loader) should be removed once the requisite SvelteKit and vite features to allow attaching a debugger are added and we can update our dependencies to use these updated versions.
 
@@ -121,12 +125,47 @@ Important to note this approach likely leaks memory so feel free to stop and res
 
 ## Building for production
 
-To create a production version of ORCA, use: `npm run build`. You can preview the production build with `npm run preview`.
+To create a production version of ORCA, use: `pnpm run build`. You can preview the production build with `pnpm run preview`.
 
 > To deploy the app, you may need to install an [adapter](https://kit.svelte.dev/docs/adapters) for your target environment. The app is not suitable for `adapter-static`, as significant logic needs to run server-side, for security.
 
+### Vercel vs Node (adapters)
+
+GitHub Actions and the Docker image build use the default (no `VERCEL` in the environment), which selects `@sveltejs/adapter-node` and emits `build/index.js`. [Vercel](https://vercel.com/) sets `VERCEL=1` during its build, which switches `svelte.config.js` to `@sveltejs/adapter-vercel` and writes output under `.vercel/output`.
+
+To reproduce the Vercel bundle locally: `rm -rf build .svelte-kit .vercel && VERCEL=1 pnpm run build`. A Prisma step runs after the Vite build on that path; `DATABASE_URL` and `DATABASE_URL_DIRECT` must be in the **shell environment** (not only in `.env` on disk). For example: `set -a && . ./.env && set +a` (bash) before the command, or export those variables explicitly.
+
+## Docker
+
+The image is based on `node:20-alpine` and uses `pnpm@10.29.2` (activated via Corepack inside the build) for dependency installation and the build. Build it locally from the repository root:
+
+```sh
+docker build -t orca:dev .
+```
+
+The container needs a reachable PostgreSQL instance and a minimal set of environment variables. The entrypoint runs Prisma migrations using `DATABASE_URL_DIRECT`, then starts the SvelteKit Node server on port 3000. Example against Postgres on the host (macOS/Windows; use `host.docker.internal` in the URL):
+
+```sh
+docker run --rm -p 3000:3000 \
+  -e DATABASE_URL='postgresql://orcaadmin:password@host.docker.internal:5432/orca?schema=orca_public' \
+  -e DATABASE_URL_DIRECT='postgresql://orcaadmin:password@host.docker.internal:5432/orca?schema=orca_public' \
+  -e DATABASE_SERVERLESS=false \
+  -e PUBLIC_HTTP_PROTOCOL=http \
+  -e PUBLIC_MEDIA_DOMAIN=/media \
+  -e ORG_CONFIG_ENCRYPTION_KEY="$(node -e 'console.log(require(\"crypto\").randomBytes(32).toString(\"base64\"))')" \
+  orca:dev
+```
+
+Pre-built multi-arch images are published on [Docker Hub](https://hub.docker.com/r/skybridgeskills/orca) as `docker.io/skybridgeskills/orca:<git-sha>` and `docker.io/skybridgeskills/orca:latest` (manifest lists `linux/amd64` and `linux/arm64`).
+
+The `CI` workflow (`.github/workflows/test.yml`) runs on every pull request to `main` and on every push to `main`: it installs dependencies with `pnpm install --frozen-lockfile`, generates the Prisma client, and runs `pnpm test:unit`. On pushes to `main` only, a second `docker-build-push` job builds the Docker image for both architectures and pushes the tags above.
+
+### Deployment prerequisites
+
+CI publishes to Docker Hub using the `skybridgeskills` org account. Add a repository secret named `DOCKERHUB_PAT` (a Docker Hub access token with push rights) in this repo’s **Settings → Secrets and variables → Actions** before the first push to `main` that should publish images—GitHub does not share secrets across repositories, so this must be set on the `orca` repo even if the same token is used elsewhere (for example, `dcc-transaction-service`).
+
 ## Documenting Dependency Types
 
-The `types` directory in this repository contains some test versions of type definition files for dependencies not yet submitted to DefinitelyTyped. These were generated with a command like `npx -p typescript tsc node_modules/jsonld-signatures/**/*.js --declaration --allowJs --emitDeclarationOnly --module system --moduleResolution node --outFile ./types/jsonldsignatures/index.d.ts` and then customized to fix the wrong module names that had been generated. See how to [test declaration files](https://github.com/DefinitelyTyped/DefinitelyTyped#testing) before submission to DefinitelyTyped.
+The `types` directory in this repository contains some test versions of type definition files for dependencies not yet submitted to DefinitelyTyped. These were generated with a command like `pnpm exec -p typescript tsc node_modules/jsonld-signatures/**/*.js --declaration --allowJs --emitDeclarationOnly --module system --moduleResolution node --outFile ./types/jsonldsignatures/index.d.ts` and then customized to fix the wrong module names that had been generated. See how to [test declaration files](https://github.com/DefinitelyTyped/DefinitelyTyped#testing) before submission to DefinitelyTyped.
 
 It may be possible to discover a way to more directly dynamically generate these in the future, so that they don't need to be checked into this repo, but some customization might be helpful, so this might be a fine place to test them.

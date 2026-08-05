@@ -1,24 +1,79 @@
 import * as m from '$lib/i18n/messages';
-import { error, redirect } from '@sveltejs/kit';
+import { error, fail, redirect } from '@sveltejs/kit';
 import type { Actions } from '@sveltejs/kit';
 import * as dotenv from 'dotenv';
 import { ValidationError } from 'yup';
 import { achievementFormSchema } from '$lib/data/achievementForm';
 import { prisma } from '$lib/../prisma/client';
-import type { Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import type { PageServerLoad } from './$types';
 //import { getUploadUrl } from '$lib/server/media';
 import stripTags from '$lib/utils/stripTags';
 import { v4 as uuidv4 } from 'uuid';
 import { connect } from 'http2';
 import { getUploadUrl } from '$lib/server/media';
+import { getAchievement } from '$lib/data/achievement';
+import { canEditAchievements } from '$lib/server/permissions';
+import type { Alignment } from '$lib/data/alignment';
 
 dotenv.config();
 
+function parseAlignmentsFromFormData(formData: FormData): Alignment[] {
+	const alignments: Alignment[] = [];
+	let index = 0;
+
+	while (formData.has(`alignment[${index}].targetUrl`)) {
+		const targetUrl = formData.get(`alignment[${index}].targetUrl`)?.toString().trim();
+		const targetName = formData.get(`alignment[${index}].targetName`)?.toString().trim();
+		const targetDescription = formData
+			.get(`alignment[${index}].targetDescription`)
+			?.toString()
+			.trim();
+		const targetCode = formData.get(`alignment[${index}].targetCode`)?.toString().trim();
+
+		if (targetUrl && targetName) {
+			const alignment: Alignment = {
+				targetUrl: stripTags(targetUrl),
+				targetName: stripTags(targetName)
+			};
+
+			if (targetDescription) {
+				alignment.targetDescription = stripTags(targetDescription);
+			}
+
+			if (targetCode) {
+				alignment.targetCode = stripTags(targetCode);
+			}
+
+			alignments.push(alignment);
+		}
+
+		index++;
+	}
+
+	return alignments;
+}
+
 export const load: PageServerLoad = async ({ locals }) => {
-	// redirect user if logged out or doesn't hold org admin role
-	if (!['GENERAL_ADMIN', 'CONTENT_ADMIN'].includes(locals.session?.user?.orgRole || 'none'))
+	// redirect user if logged out or doesn't have permission to create achievements
+	if (!locals.session?.user?.id) {
 		throw redirect(302, '/achievements');
+	}
+
+	const hasPermission = await canEditAchievements({
+		user: {
+			id: locals.session.user.id,
+			orgRole: locals.session.user.orgRole
+		},
+		org: {
+			id: locals.org.id,
+			json: locals.org.json
+		}
+	});
+
+	if (!hasPermission) {
+		throw redirect(302, '/achievements');
+	}
 
 	const categories = await prisma.achievementCategory.findMany({
 		where: {
@@ -37,53 +92,54 @@ export const load: PageServerLoad = async ({ locals }) => {
 
 export const actions: Actions = {
 	default: async ({ locals, cookies, request }) => {
-		if (!['GENERAL_ADMIN', 'CONTENT_ADMIN'].includes(locals.session?.user?.orgRole || 'none'))
-			throw error(403, m.error_unauthorized());
+		if (!locals.session?.user?.id) {
+			throw error(403, m.lower_home_cow_view());
+		}
+
+		const hasPermission = await canEditAchievements({
+			user: {
+				id: locals.session.user.id,
+				orgRole: locals.session.user.orgRole
+			},
+			org: {
+				id: locals.org.id,
+				json: locals.org.json
+			}
+		});
+
+		if (!hasPermission) {
+			throw error(403, m.lower_home_cow_view());
+		}
 
 		const newIdentifier = uuidv4();
 		const requestData = await request.formData();
+		const rawAlignments = parseAlignmentsFromFormData(requestData);
 		const imageKey = requestData.get('imageExtension')
 			? `achievement-${newIdentifier}/raw-image.${requestData.get('imageExtension')}`
 			: null;
-		let formData: Prisma.AchievementCreateInput = {
-			id: newIdentifier,
+
+		const claimTemplate_enabled =
+			(requestData.get('claimTemplate_enabled')?.toString() || 'off') === 'on';
+
+		const rawClaimTemplate = stripTags(requestData.get('claimTemplate')?.toString() || '');
+		const formData = {
 			name: stripTags(requestData.get('name')?.toString()) || '',
 			description: stripTags(requestData.get('description')?.toString()) || '',
 			criteriaId: requestData.get('url')?.toString(),
 			criteriaNarrative: stripTags(requestData.get('criteriaNarrative')?.toString()),
-			organization: { connect: { id: locals.org.id } },
-			json: '',
-			identifier: `urn:uuid:${newIdentifier}`,
-			image: imageKey,
-			achievementConfig: {
-				create: {
-					organization: { connect: { id: locals.org.id } },
-					claimable: requestData.get('config_claimable')?.toString() == 'on',
-					reviewsRequired:
-						parseInt(requestData.get('config_reviewsRequired')?.toString() || '') || 0
-				}
-			}
+			category: stripTags(requestData.get('category')?.toString()),
+
+			claimable: requestData.get('claimable')?.toString(), // 'on' or 'off'
+			claimableSelectedOption: requestData.get('claimableSelectedOption')?.toString(), // 'off', 'badge', or 'public'
+			claimRequires: requestData.get('claimRequires')?.toString(),
+			reviewRequires: requestData.get('reviewRequires')?.toString(),
+			reviewsRequired: parseInt(requestData.get('reviewsRequired')?.toString() || '') || 0,
+			reviewableSelectedOption: requestData.get('reviewableSelectedOption')?.toString() || 'none',
+			capabilities_inviteRequires:
+				requestData.get('capabilities_inviteRequires')?.toString() || null,
+			claimTemplate: claimTemplate_enabled ? rawClaimTemplate : '',
+			alignments: rawAlignments
 		};
-
-		if (
-			formData.achievementConfig?.create?.claimable &&
-			!!requestData.get('config_achievementRequires')?.toString()
-		)
-			formData.achievementConfig.create['claimRequires'] = {
-				connect: { id: requestData.get('config_achievementRequires')?.toString() || '' }
-			};
-
-		if (
-			formData.achievementConfig?.create?.claimable &&
-			!!requestData.get('config_reviewRequires')?.toString()
-		)
-			formData.achievementConfig.create['reviewRequires'] = {
-				connect: { id: requestData.get('config_reviewRequires')?.toString() || '' }
-			};
-
-		const categoryId = stripTags(requestData.get('category')?.toString());
-		if (categoryId && categoryId != 'uncategorized')
-			formData.category = { connect: { id: categoryId } };
 
 		try {
 			await achievementFormSchema.validate(formData);
@@ -91,8 +147,77 @@ export const actions: Actions = {
 			if (err instanceof ValidationError) throw error(400, err.message);
 		}
 
+		if (formData.capabilities_inviteRequires) {
+			try {
+				const relatedInviteRequiresAchievement = await getAchievement(
+					formData.capabilities_inviteRequires,
+					locals.org.id
+				);
+			} catch (e) {
+				return fail(400, {
+					code: 'inviteRequires',
+					message: m.swift_steady_falcon_notfound()
+				});
+			}
+		}
+
+		const achievementData = {
+			id: newIdentifier,
+			identifier: `urn:uuid:${newIdentifier}`,
+			name: formData.name,
+			organization: { connect: { id: locals.org.id } },
+			description: formData.description,
+			criteriaId: formData.criteriaId,
+			criteriaNarrative: formData.criteriaNarrative,
+			image: imageKey,
+			json: (formData.alignments.length > 0
+				? { alignment: formData.alignments }
+				: {}) as unknown as Prisma.InputJsonObject,
+			category:
+				formData.category != 'uncategorized' ? { connect: { id: formData.category } } : undefined,
+			achievementConfig: {
+				create: {
+					organization: { connect: { id: locals.org.id } },
+					claimable: formData.claimable == 'on',
+					claimRequires:
+						formData.claimable == 'on' && formData.claimRequires
+							? { connect: { id: formData.claimRequires } }
+							: undefined,
+					reviewRequires: formData.reviewRequires
+						? { connect: { id: formData.reviewRequires } }
+						: undefined,
+					reviewsRequired: formData.reviewsRequired,
+					json: {
+						capabilities: {
+							inviteRequires: formData.capabilities_inviteRequires
+						},
+						claimTemplate: formData.claimTemplate
+					}
+				}
+			}
+		};
+
+		// "Reviewed by an admin requires only one review, no matter what."
+		if (formData.reviewableSelectedOption == 'admin')
+			achievementData.achievementConfig.create['reviewsRequired'] = 1;
+
+		if (achievementData.achievementConfig.create?.json.capabilities.inviteRequires) {
+			const inviteRequiresAchievement = await prisma.achievement.findFirst({
+				where: {
+					organizationId: locals.org.id,
+					id: achievementData.achievementConfig.create.json.capabilities.inviteRequires
+				}
+			});
+			if (!inviteRequiresAchievement) {
+				throw error(400, m.sharp_quiet_panther_invitereq());
+			}
+		}
+
 		const achievement = await prisma.achievement.create({
-			data: formData
+			data: achievementData,
+			include: {
+				achievementConfig: true
+			}
 		});
 
 		const imageUploadUrl = imageKey ? await getUploadUrl(imageKey) : null;

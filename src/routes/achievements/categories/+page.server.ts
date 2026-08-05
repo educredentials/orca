@@ -40,7 +40,7 @@ export const actions: Actions = {
 
 	update: async ({ locals, cookies, request, params }) => {
 		if (!['GENERAL_ADMIN', 'CONTENT_ADMIN'].includes(locals.session?.user?.orgRole || 'none'))
-			throw error(403, m.error_unauthorized());
+			throw error(403, m.lower_home_cow_view());
 
 		const requestData = await request.formData();
 		const categoryId = stripTags(requestData.get('update_categoryId')?.toString()) || '';
@@ -50,7 +50,7 @@ export const actions: Actions = {
 		// Can only search by unique inputs on update, so verify first this category is in this org
 		const existingCategory = await prisma.achievementCategory.findFirstOrThrow({
 			where: {
-				organization: locals.org,
+				organizationId: locals.org.id,
 				id: categoryId
 			}
 		});
@@ -68,7 +68,7 @@ export const actions: Actions = {
 
 	delete: async ({ locals, cookies, request, params }) => {
 		if (!['GENERAL_ADMIN', 'CONTENT_ADMIN'].includes(locals.session?.user?.orgRole || 'none'))
-			throw error(403, m.error_unauthorized());
+			throw error(403, m.lower_home_cow_view());
 
 		const requestData = await request.formData();
 		const categoryId = stripTags(requestData.get('delete_categoryId')?.toString()) || '';
@@ -76,7 +76,7 @@ export const actions: Actions = {
 		// Can only search by unique inputs on update, so verify first this category is in this org
 		const existingCategory = await prisma.achievementCategory.findFirstOrThrow({
 			where: {
-				organization: locals.org,
+				organizationId: locals.org.id,
 				id: categoryId
 			}
 		});

@@ -20,18 +20,42 @@
 	import { PUBLIC_HTTP_PROTOCOL } from '$env/static/public';
 	import Pagination from '$lib/components/Pagination.svelte';
 	import { calculatePageAndSize } from '$lib/utils/pagination';
+	import {
+		backpackClaims,
+		backpackClaimsLoading,
+		fetchBackpackClaims,
+		outstandingInvitesLoading,
+		fetchOutstandingInvites
+	} from '$lib/stores/backpackStore';
+	import { LoadingStatus, ensureLoaded } from '$lib/stores/common';
+	import { onMount } from 'svelte';
+	import LoadingSpinner from '$lib/components/LoadingSpinner.svelte';
+	import {
+		achievementsLoading,
+		fetchAchievements,
+		getAchievementById
+	} from '$lib/stores/achievementStore';
 
 	dayjs.extend(relativeTime);
 	export let data: PageData;
+	let { page: currentPageNum, pageSize } = calculatePageAndSize($page.url);
+	$: currentPageData = $backpackClaims.slice(
+		(currentPageNum - 1) * pageSize,
+		currentPageNum * pageSize
+	);
+
 	let currentShareIntent: (AchievementClaim & { achievement: Achievement }) | null = null;
 
-	const breadcrumbItems = [{ text: m.home(), href: '/' }, { text: m.backpack() }];
+	const breadcrumbItems = [
+		{ text: m.each_fluffy_fox_view(), href: '/' },
+		{ text: m.bold_petty_dog_march() }
+	];
 
 	const handleShare = (claim: AchievementClaim & { achievement: Achievement }) => {
 		if (navigator.share) {
 			navigator.share({
 				title: claim.achievement.name,
-				text: `${m.claim_shareText_heading({ name: claim.achievement.name })} 
+				text: `${m.piquant_dense_meerkat_link({ name: claim.achievement.name })} 
 				
 				${claim.achievement.description}`,
 				url: `${PUBLIC_HTTP_PROTOCOL}://${data.org.domain}/ob2/a/${claim.id}`
@@ -47,20 +71,25 @@
 		if (!claim || !navigator.clipboard) return;
 		navigator.clipboard.writeText(`${PUBLIC_HTTP_PROTOCOL}://${data.org.domain}/ob2/a/${claim.id}`);
 	};
+
+	onMount(() => {
+		ensureLoaded(backpackClaimsLoading, fetchBackpackClaims);
+		ensureLoaded(outstandingInvitesLoading, fetchOutstandingInvites);
+		ensureLoaded(achievementsLoading, fetchAchievements);
+	});
 </script>
 
 <Breadcrumbs items={breadcrumbItems} />
 
-<Heading
-	title={m.backpack_yourBadges_heading()}
-	level="h1"
-	description={m.backpack_yourBadges_description()}
-/>
+<Heading title={m.merry_major_parrot_tap()} level="h1" description={m.warm_hard_bat_emerge()} />
 
+{#if [LoadingStatus.NotStarted, LoadingStatus.Loading].includes($backpackClaimsLoading)}
+	<LoadingSpinner />
+{/if}
 {#each data.outstandingInvites as invite}
 	<div class="my-2">
 		<Alert>
-			{m.status_invited_description()}
+			{m.kind_dry_panther_bask()}
 			<a
 				href={`/achievements/${invite.achievementId}/claim?i=${invite.id}&e=${encodeURIComponent(
 					invite.inviteeEmail
@@ -72,66 +101,80 @@
 	</div>
 {/each}
 
-<Pagination paging={{ ...calculatePageAndSize($page.url), count: data.achievementCount }} />
-{#each data.achievementClaims as claim (claim.id)}
-	<div class="mb-4">
-		<AchievementSummary
-			{claim}
-			achievement={claim.achievement}
-			isClickable={true}
-			href={`/claims/${claim.id}`}
-			linkAchievement={false}
-		>
-			<div slot="moredescription">
-				<p class="text-sm md:text-md font-light text-gray-500 dark:text-gray-400">
-					{m.claimed()}
-					{dayjs(claim.createdOn).fromNow()}
-				</p>
-			</div>
-			<div slot="actions">
-				{#if claim.claimStatus === 'ACCEPTED' && claim.validFrom}
-					<div class="p-2 flex flex-row space-x-3">
-						<a
-							class="icon text-gray-600 hover:text-blue-600 w-4 h-4 cursor-pointer"
-							tabindex="0"
-							href={`/claims/${claim.id}`}
-						>
-							<span class="sr-only">View details</span>
-							<Icon src={FaSolidInfoCircle} size="20" color="currentColor" />
-						</a>
-						<button
-							class="icon text-gray-600 hover:text-blue-600 w-4 h-4 cursor-pointer"
-							tabindex="0"
-							on:click={(e) => {
-								handleShare(claim);
-								e.preventDefault();
-								e.stopPropagation();
-							}}
-							on:keypress={(e) => {
-								handleShare(claim);
-								e.preventDefault();
-								e.stopPropagation();
-							}}
-						>
-							<span class="sr-only">{m.share()}</span>
-							<Icon src={FaShareSquare} size="20" color="currentColor" />
-						</button>
+{#if $backpackClaimsLoading == LoadingStatus.Complete && $achievementsLoading == LoadingStatus.Complete}
+	<Pagination
+		paging={{
+			page: currentPageNum,
+			pageSize,
+			count: $backpackClaims.length,
+			action: (p) => {
+				currentPageNum = p;
+			}
+		}}
+	/>
+	{#each currentPageData as claim (claim.id)}
+		{@const achievement = getAchievementById(claim.achievementId)}
+		{#if achievement}
+			<div class="mb-4">
+				<AchievementSummary
+					{claim}
+					{achievement}
+					isClickable={true}
+					href={`/claims/${claim.id}`}
+					linkAchievement={false}
+				>
+					<div slot="moredescription">
+						<p class="text-sm md:text-md font-light text-gray-500 dark:text-gray-400">
+							{m.equal_active_parrot_march()}
+							{dayjs(claim.createdOn).fromNow()}
+						</p>
 					</div>
-				{/if}
+					<div slot="actions">
+						{#if claim.claimStatus === 'ACCEPTED' && claim.validFrom}
+							<div class="p-2 flex flex-row space-x-3">
+								<a
+									class="icon text-gray-600 hover:text-blue-600 w-4 h-4 cursor-pointer"
+									tabindex="0"
+									href={`/claims/${claim.id}`}
+								>
+									<span class="sr-only">View details</span>
+									<Icon src={FaSolidInfoCircle} size="20" color="currentColor" />
+								</a>
+								<button
+									class="icon text-gray-600 hover:text-blue-600 w-4 h-4 cursor-pointer"
+									tabindex="0"
+									on:click={(e) => {
+										handleShare({ ...claim, achievement });
+										e.preventDefault();
+										e.stopPropagation();
+									}}
+									on:keypress={(e) => {
+										handleShare({ ...claim, achievement });
+										e.preventDefault();
+										e.stopPropagation();
+									}}
+								>
+									<span class="sr-only">{m.happy_sparse_lemur_clasp()}</span>
+									<Icon src={FaShareSquare} size="20" color="currentColor" />
+								</button>
+							</div>
+						{/if}
+					</div>
+				</AchievementSummary>
 			</div>
-		</AchievementSummary>
-	</div>
-{:else}
-	<EmptyStateZone title="You haven't claimed any badges yet.">
-		<Backpack slot="image" />
-		<p slot="description">
-			{m.backpack_emptyState_description()}
-			<br /><a href="/achievements" class="font-bold underline hover:no-underline"
-				>{m.backpack_emptyStateCTA()}</a
-			>.
-		</p>
-	</EmptyStateZone>
-{/each}
+		{/if}
+	{:else}
+		<EmptyStateZone title="You haven't claimed any badges yet.">
+			<Backpack slot="image" />
+			<p slot="description">
+				{m.male_serious_pug_link()}
+				<br /><a href="/achievements" class="font-bold underline hover:no-underline"
+					>{m.arable_aqua_deer_scribe()}</a
+				>.
+			</p>
+		</EmptyStateZone>
+	{/each}
+{/if}
 
 <Modal
 	id="share-modal"
@@ -143,7 +186,7 @@
 	actions={[]}
 >
 	<p class="max-w-2xl mb-4 lg:mb-8 text-gray-500 text-sm md:text-md dark:text-gray-400">
-		{m.share_description()}
+		{m.quiet_quick_panther_emerge()}
 	</p>
 	<div class="flex mb-3 w-full">
 		<span
@@ -159,7 +202,7 @@
 				handleCopyToClipboard(currentShareIntent);
 			}}
 		>
-			{m.copyCTA()}
+			{m.quick_clear_owl_copy()}
 		</button>
 	</div>
 	{#if currentShareIntent && currentShareIntent?.achievement}

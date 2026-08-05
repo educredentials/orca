@@ -4,7 +4,13 @@
 	import { goto } from '$app/navigation';
 	import Button from '$lib/components/Button.svelte';
 	import type { ActionData, PageData, SubmitFunction } from './$types';
-	import { claimPending, claimEmail, claimId, inviteId } from '$lib/stores/activeClaimStore';
+	import {
+		claimPending,
+		claimEmail,
+		claimId,
+		inviteId,
+		inviteCreatedAt
+	} from '$lib/stores/activeClaimStore';
 	import { onMount } from 'svelte';
 	import { nextPath, session } from '$lib/stores/sessionStore';
 	import Heading from '$lib/components/Heading.svelte';
@@ -31,9 +37,29 @@
 	});
 
 	const registerHandler: SubmitFunction = () => {
-		return ({ result }: { result: ActionResult }) => {
-			if (result.type === 'error') errorMessage = result.error?.message;
-			else if (result.type === 'success' && result.data?.session) {
+		return async ({ result }: { result: ActionResult }) => {
+			if (result.type === 'error') {
+				errorMessage = result.error.message;
+				// TODO: specifically handle the case where the invite was stale
+				if (result.error.code === 'invite_expired') {
+					const formData = new URLSearchParams();
+					formData.append('inviteId', $inviteId);
+					formData.append('email', email);
+					const loginResult = await fetch('/login', {
+						method: 'POST',
+						body: formData.toString(),
+						headers: {
+							'Content-Type': 'application/x-www-form-urlencoded'
+						}
+					});
+					if (loginResult.status == 200) {
+						const loginData = await loginResult.json();
+						sessionId = loginData.sessionId;
+					} else {
+						errorMessage = m.plane_sad_guppy_support();
+					}
+				}
+			} else if (result.type === 'success' && result.data?.session) {
 				const data = result.data;
 				$session = data.session as App.SessionData;
 				goto(data.location ?? $nextPath ?? '/');
@@ -71,9 +97,14 @@
 <div
 	class="mt-8 shadow-md bg-white dark:bg-gray-800 dark:border-gray-700 p-8 rounded-xl mx-auto max-w-2xl"
 >
-	{#if register}
+	<!-- if the invite is less than 24 hours old no login code required, just use inviteId secret -->
+	{#if register || (!sessionId && Date.now() < ($inviteCreatedAt?.getTime() ?? 0) + 86400000)}
 		<!-- Step 3: User needs to fill out the rest of the registration form. -->
-		<Heading title={m.logInCTA()} description={m.loginInviteCTA_description()} />
+		<!-- Or a user goes directly here if they have a fresh (less than 1 day old) invite -->
+		<Heading
+			title={m.bright_swift_eagle_login()}
+			description={m.gentle_brave_falcon_logininvdesc()}
+		/>
 		<form
 			id="registerForm"
 			method="POST"
@@ -84,7 +115,7 @@
 			use:enhance={registerHandler}
 		>
 			{#if $inviteId}
-				<input type="hidden" id="inviteId" name="inviteId" value={$inviteId} />
+				<input type="hidden" id="registerInviteId" name="inviteId" value={$inviteId} />
 			{/if}
 			<input
 				type="hidden"
@@ -103,7 +134,7 @@
 					for="register_givenName"
 					class="block mb-2 text-sm font-medium text-gray-900 dark:text-gray-300"
 				>
-					{m.givenName()}
+					{m.bright_swift_eagle_given()}
 				</label>
 				<input
 					type="text"
@@ -120,7 +151,7 @@
 					for="register_familyName"
 					class="block mb-2 text-sm font-medium text-gray-900 dark:text-gray-300"
 				>
-					{m.familyName()}
+					{m.calm_steady_lynx_family()}
 				</label>
 				<input
 					type="text"
@@ -143,16 +174,16 @@
 						for="register_agreeTerms"
 						class="ml-2 text-sm font-medium text-gray-900 dark:text-gray-300"
 					>
-						{m.tos_agreementCTA_description()}
+						{m.bright_sea_sparrow_work()}
 					</label>
 				</div>
 			</div>
 
-			<Button buttonType="submit" text={m.submitCTA()} />
+			<Button buttonType="submit" text={m.bold_swift_eagle_submit()} />
 		</form>
 	{:else if sessionId}
 		<!-- Step 2: Verify control of email to activate session -->
-		<Heading title={m.logInCTA()} description={m.login_checkEmailCTA_description()} />
+		<Heading title={m.bright_swift_eagle_login()} description={m.tired_soft_goat_cherish()} />
 		<form id="verifyForm" method="POST" action="?/verify" use:enhance={verifyHandler}>
 			<input type="hidden" id="inviteId" name="inviteId" bind:value={$inviteId} />
 			<div class="mt-7">
@@ -160,7 +191,7 @@
 					for="verificationCode"
 					class="block mb-2 text-sm font-medium text-gray-900 dark:text-gray-300"
 				>
-					{m.verificationCode()}
+					{m.quick_safe_deer_verify()}
 				</label>
 				<input
 					type="number"
@@ -183,18 +214,21 @@
 				{/if}
 			</div>
 			<div class="mt-5">
-				<Button buttonType="submit" text={m.submitCTA()} />
+				<Button buttonType="submit" text={m.bold_swift_eagle_submit()} />
 			</div>
 		</form>
 	{:else}
 		<!-- Step 1: Enter email to login -->
 
 		{#if !$inviteId}
-			<Heading title={m.logInCTA()} description={m.loginCTA_description()} />
+			<Heading
+				title={m.bright_swift_eagle_login()}
+				description={m.fresh_bright_sparrow_logindesc()}
+			/>
 		{:else}
-			<h1 class="text-xl sm:text-2xl mb-3 dark:text-white">{m.loginInviteCTA()}</h1>
+			<h1 class="text-xl sm:text-2xl mb-3 dark:text-white">{m.warm_tangy_deer_logininvite()}</h1>
 			<p class="my-4 text-sm text-gray-500 dark:text-gray-400">
-				{m.inviteJoinCTA_description({ name: data.org.name })}
+				{m.quick_clear_owl_invitejoin({ name: data.org.name })}
 			</p>
 		{/if}
 		<form id="loginForm" method="POST" action="?/login" use:enhance={loginHandler}>
@@ -203,14 +237,14 @@
 			{/if}
 			<div class="mt-7">
 				<label for="email" class="block mb-2 text-sm font-medium text-gray-900 dark:text-gray-300"
-					>{m.yourEmail()}</label
+					>{m.firm_clear_fox_email()}</label
 				>
 				<input
 					type="email"
 					id="email"
 					name="email"
 					class="max-w-xs bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500"
-					placeholder="name@mycommunity.com"
+					placeholder={m.few_seemly_mare_propel()}
 					required
 					bind:value={email}
 				/>
@@ -221,7 +255,7 @@
 				{/if}
 			</div>
 			<div class="mt-5">
-				<Button id="loginFormSubmit" buttonType="submit" text={m.login_sendCodeCTA()} />
+				<Button id="loginFormSubmit" buttonType="submit" text={m.early_next_seahorse_change()} />
 			</div>
 		</form>
 	{/if}

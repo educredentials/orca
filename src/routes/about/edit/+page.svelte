@@ -9,24 +9,42 @@
 	import { goto } from '$app/navigation';
 	import { onMount } from 'svelte';
 	import { imageExtension } from '$lib/utils/imageUrl';
+	import AchievementSelect from '$lib/components/forms/AchievementSelect.svelte';
+	import RadioOption from '$lib/components/forms/RadioOption.svelte';
+	import FormFieldLabel from '$lib/components/forms/FormFieldLabel.svelte';
+	import { achievementsLoading, fetchAchievements } from '$lib/stores/achievementStore';
+	import { ensureLoaded } from '$lib/stores/common';
+	import { locales } from '$lib/i18n/runtime';
 
-	export let form: ActionData;
+	export const form: ActionData | undefined = undefined;
 	export let data: PageData;
 
 	let formData = {
-		name: data.organization.name,
-		description: data.organization.description,
-		url: data.organization.url,
-		primaryColor: data.organization.primaryColor,
-		logo: data.organization.logo,
-		imageExtension: data.organization.logo ? imageExtension(data.organization.logo) : null
+		name: data.org.name,
+		description: data.org.description,
+		url: data.org.url,
+		primaryColor: data.org.primaryColor,
+		logo: data.org.logo,
+		imageExtension: data.org.logo ? imageExtension(data.org.logo) : null,
+		tagline: data.org.json?.tagline,
+		defaultLanguage: data.org.json?.defaultLanguage || null,
+		editAchievementCapability: data.org.json?.permissions?.editAchievementCapability
+			?.requiresAchievement
+			? 'achievement'
+			: 'admin',
+		editAchievementRequires:
+			data.org.json?.permissions?.editAchievementCapability?.requiresAchievement || null
 	};
 	const noErrors: { [key: string]: string | null } = {
 		name: null,
 		description: null,
 		url: null,
 		primaryColor: null,
-		logo: null
+		logo: null,
+		tagline: null,
+		defaultLanguage: null,
+		editAchievementCapability: null,
+		editAchievementRequires: null
 	};
 	let errors = { ...noErrors };
 
@@ -38,10 +56,11 @@
 			})
 			.catch((err: yup.ValidationError) => {
 				errors = { ...noErrors };
-				console.log(errors);
 				err.inner.map((err) => {
-					errors[err.path] = err.message;
-					errors = errors;
+					if (err.path) {
+						errors[err.path] = err.message;
+						errors = errors;
+					}
 				});
 			});
 	};
@@ -56,7 +75,7 @@
 
 		// see if the form data image is a dataURI, it is this in case of new file or one loaded from DB
 		const imageEdited =
-			`${formData.logo}`.startsWith('data:') || (!formData.logo && !!data.organization.logo);
+			`${formData.logo}`.startsWith('data:') || (!formData.logo && !!data.org.logo);
 		formsData.append('imageEdited', `${imageEdited}`);
 
 		if (formData['imageExtension']) formsData.append('imageExtension', formData.imageExtension);
@@ -69,9 +88,9 @@
 			case 'success':
 				//read the upload url and put the image data to it.
 				if (formData['logo'] && result.data?.imageUploadUrl) {
-					const imageAsBlob = await (await fetch(formData['logo'])).blob();
+					const imageAsBlob = await (await fetch(formData['logo'] as string)).blob();
 					const contentType = `image/${formData['imageExtension'] === 'png' ? 'png' : 'svg+xml'}`;
-					await fetch(result.data.imageUploadUrl, {
+					await fetch(result.data.imageUploadUrl as string, {
 						method: 'PUT',
 						body: imageAsBlob,
 						headers: {
@@ -88,28 +107,33 @@
 				console.error(result.error);
 		}
 		if (response.status == 400) {
-			errors['name'] = result.status?.toString() || 'Unknown error';
+			errors['name'] = result.status?.toString() || m.factual_agent_mantis_jump();
 		}
 	};
+
+	onMount(async () => {
+		await ensureLoaded(achievementsLoading, fetchAchievements);
+	});
 </script>
 
-<h1 class="text-xl sm:text-2xl mb-3 dark:text-white">{m.org_editCTA()}</h1>
+<h1 class="text-xl sm:text-2xl mb-3 dark:text-white">{m.alert_shy_owl_march()}</h1>
 <p class="my-4 text-sm text-gray-500 dark:text-gray-400">
-	{m.org_edit_description()}
+	{m.sad_mellow_fox_ascend()}
 </p>
 
 <form method="POST" class="max-w-2xl" on:submit|preventDefault|stopPropagation={handleSubmit}>
 	<div class="mb-6" class:isError={errors.name}>
 		<label
 			for="orgEdit_name"
-			class="block mb-2 text-sm font-medium text-gray-900 dark:text-gray-300">{m.org_name()}</label
+			class="block mb-2 text-sm font-medium text-gray-900 dark:text-gray-300"
+			>{m.sad_petty_boar_approve()}</label
 		>
 		<input
 			type="text"
 			id="orgEdit_name"
 			name="name"
 			class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500"
-			placeholder="My Org"
+			placeholder={m.lime_placeholder_communityname_gecko()}
 			bind:value={formData.name}
 			required
 		/>
@@ -119,14 +143,14 @@
 		<label
 			for="orgEdit_description"
 			class="block mb-2 text-sm font-medium text-gray-900 dark:text-gray-400"
-			>{m.description()}</label
+			>{m.kind_mellow_pug_enchant()}</label
 		>
 		<textarea
 			id="orgEdit_description"
 			name="description"
 			rows="4"
 			class="block p-2.5 w-full text-sm text-gray-900 bg-gray-50 rounded-lg border border-gray-300 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500"
-			placeholder="What makes this community special is..."
+			placeholder={m.elegant_free_cow_cherish()}
 			bind:value={formData.description}
 		/>
 		{#if errors.description}<p class="mt-2 text-sm text-red-600 dark:text-red-500">
@@ -135,7 +159,7 @@
 	</div>
 	<div class="mb-6" class:isError={errors.url}>
 		<label for="orgEdit_url" class="block mb-2 text-sm font-medium text-gray-900 dark:text-gray-300"
-			>{m.url()}</label
+			>{m.best_fancy_rabbit_shrine()}</label
 		>
 		<input
 			type="text"
@@ -149,11 +173,66 @@
 		{#if errors.url}<p class="mt-2 text-sm text-red-600 dark:text-red-500">{errors.url}</p>{/if}
 	</div>
 
+	<div class="mb-6" class:isError={errors.tagline}>
+		<label
+			for="orgEdit_tagline"
+			class="block mb-2 text-sm font-medium text-gray-900 dark:text-gray-300"
+			>{m.grand_tangy_cheetah_buy()}</label
+		>
+		<input
+			type="text"
+			id="orgEdit_tagline"
+			name="tagline"
+			class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500"
+			placeholder={m.moving_east_okapi_shrine()}
+			bind:value={formData.tagline}
+			on:blur={validate}
+		/>
+		{#if errors.tagline}<p class="mt-2 text-sm text-red-600 dark:text-red-500">
+				{errors.tagline}
+			</p>{/if}
+	</div>
+
+	<div class="mb-6" class:isError={errors.defaultLanguage}>
+		<label
+			for="orgEdit_defaultLanguage"
+			class="block mb-2 text-sm font-medium text-gray-900 dark:text-gray-300"
+			>{m.steady_antsy_parrot_view()}</label
+		>
+		<select
+			id="orgEdit_defaultLanguage"
+			name="defaultLanguage"
+			bind:value={formData.defaultLanguage}
+			class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500"
+			on:blur={validate}
+		>
+			<option value="">{m.calm_swift_eagle_rest()}</option>
+			{#each locales as lang}
+				<option value={lang}>
+					{#if lang === 'en-US'}
+						{m.flat_known_oryx_view()}
+					{:else if lang === 'en-AU'}
+						{m.piquant_dry_kite_emerge()}
+					{:else if lang === 'fr'}
+						{m.male_clear_crossbill_file()}
+					{:else if lang === 'it'}
+						{m.dark_dry_cuckoo_soar()}
+					{:else}
+						{lang}
+					{/if}
+				</option>
+			{/each}
+		</select>
+		{#if errors.defaultLanguage}
+			<p class="mt-2 text-sm text-red-600 dark:text-red-500">{errors.defaultLanguage}</p>
+		{/if}
+	</div>
+
 	<div class="mb-6" class:isError={errors.primaryColor}>
 		<label
 			for="orgEdit_primaryColor"
 			class="block mb-2 text-sm font-medium text-gray-900 dark:text-gray-300"
-			>{m.org_primaryColor()}</label
+			>{m.lower_happy_thrush_drip()}</label
 		>
 		<input
 			type="color"
@@ -175,7 +254,8 @@
 		<div class:isError={errors.logo}>
 			<label
 				for="achievementEdit_image"
-				class="block mb-2 text-sm font-medium text-gray-900 dark:text-gray-400">{m.image()}</label
+				class="block mb-2 text-sm font-medium text-gray-900 dark:text-gray-400"
+				>{m.vivid_dark_pug_file()}</label
 			>
 			<ImageFileDrop
 				bind:currentValue={formData.logo}
@@ -189,16 +269,91 @@
 		</div>
 	</div>
 
+	<!-- Permissions -->
+	<div class="mb-6">
+		<h3 class="text-lg font-medium text-gray-900 dark:text-white mb-4">
+			{m.pink_slow_warthog_fetch()}
+		</h3>
+		<p class="text-sm mb-2 text-gray-900">
+			{m.inclusive_loved_tortoise_clasp()}
+		</p>
+		<div class:isError={errors.editAchievementCapability}>
+			<FormFieldLabel for="editAchievementCapability">{m.lime_true_toucan_blend()}</FormFieldLabel>
+			<input
+				type="hidden"
+				name="editAchievementCapability"
+				bind:value={formData.editAchievementCapability}
+			/>
+			<div class="space-y-2">
+				<RadioOption
+					bind:selectedOption={formData.editAchievementCapability}
+					value="admin"
+					name="editAchievementCapability"
+					label="Only administrators"
+					id="orgEdit_editAchievementCapability_admin"
+				/>
+				<RadioOption
+					bind:selectedOption={formData.editAchievementCapability}
+					value="achievement"
+					name="editAchievementCapability"
+					id="orgEdit_editAchievementCapability_achievement"
+				>
+					<span class="inline">{m.due_fit_guppy_surge()}</span>
+					<AchievementSelect
+						badgeId={formData.editAchievementRequires || ''}
+						on:unselected={() => {
+							formData.editAchievementCapability = 'admin';
+							formData.editAchievementRequires = null;
+						}}
+						on:selected={(e) => {
+							formData.editAchievementRequires = e.detail;
+						}}
+						disabled={formData.editAchievementCapability != 'achievement'}
+						label={m.fuzzy_nimble_squirrel_approve()}
+						description={m.deft_fluffy_cat_sprout()}
+						inputId="orgEdit_editAchievementRequires"
+						inputName="editAchievementRequires"
+						errorMessage={errors.editAchievementRequires || ''}
+					>
+						<span slot="invoker" class="inline" let:handler>
+							{#if !formData.editAchievementRequires}
+								<button
+									on:click|preventDefault={() => {
+										formData.editAchievementCapability = 'achievement';
+										handler();
+									}}
+									class={`font-medium${
+										formData.editAchievementCapability == 'achievement'
+											? ' underline hover:no-underline'
+											: 'text-gray-700 dark:text-gray-500 cursor-auto'
+									}`}
+									tabindex={formData.editAchievementCapability == 'achievement' ? 0 : -1}
+								>
+									{m.bright_swift_eagle_choose()}
+								</button>
+							{/if}
+						</span>
+					</AchievementSelect>
+				</RadioOption>
+			</div>
+			{#if errors.editAchievementCapability}
+				<p class="mt-2 text-sm text-red-600 dark:text-red-500">
+					{errors.editAchievementCapability}
+				</p>
+			{/if}
+		</div>
+	</div>
+
 	<div class="flex items-center lg:order-2">
 		<button
 			type="submit"
 			class="mr-3 text-white bg-blue-700 hover:bg-blue-800 focus:ring-4 focus:outline-none focus:ring-blue-300 font-medium rounded-lg text-sm w-full sm:w-auto px-5 py-2.5 text-center dark:bg-blue-600 dark:hover:bg-blue-700 dark:focus:ring-blue-800"
-			>{m.submitCTA()}</button
+			>{m.bold_swift_eagle_submit()}</button
 		>
 		<a
 			href="/about"
 			class="text-gray-800 dark:text-white hover:bg-gray-50 focus:ring-4 focus:ring-gray-300 font-medium rounded-lg text-sm px-4 lg:px-5 py-2 lg:py-2.5 mr-2 dark:hover:bg-gray-700 focus:outline-none dark:focus:ring-gray-800"
-			>{m.cancelCTA()}</a
+			>{m.calm_steady_lynx_cancel()}</a
 		>
 	</div>
 </form>

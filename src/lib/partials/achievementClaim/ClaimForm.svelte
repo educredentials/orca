@@ -1,11 +1,6 @@
 <script lang="ts">
 	import * as m from '$lib/i18n/messages';
-	import type {
-		Achievement,
-		AchievementClaim,
-		AchievementConfig,
-		Identifier
-	} from '@prisma/client';
+	import type { Achievement, AchievementClaim, Identifier } from '@prisma/client';
 	import { session } from '$lib/stores/sessionStore';
 	import {
 		claimEmail,
@@ -23,10 +18,9 @@
 	import Button from '$lib/components/Button.svelte';
 	import MarkdownEditor from '$lib/components/MarkdownEditor.svelte';
 	import MarkdownRender from '$lib/components/MarkdownRender.svelte';
-
 	export let existingBadgeClaim: AchievementClaim | null = null;
 	export let achievement: Achievement;
-	export let achievementConfig: AchievementConfig | null = null;
+	export let achievementConfig: App.AchievementConfig | null = null;
 	export let claimIntent: 'ACCEPTED' | 'UNACCEPTED' | 'REJECTED' = 'ACCEPTED';
 	const userIdentifiers: Identifier[] = $page.data.user?.identifiers || [];
 	const userEmails = userIdentifiers.filter((iden) => iden.type == 'EMAIL');
@@ -45,16 +39,18 @@
 				const formData = new FormData();
 				formData.append('email', $claimEmail);
 				formData.append('narrative', 'Self-invitation of open claiming badge');
-				formData.append('skipEmailNotification', 'on');
 				const response = await fetch(`/achievements/${achievement.id}/award`, {
 					method: 'POST',
 					body: formData
 				});
 				if (response.status != 200) {
-					throw error(400, m.claim_couldNotObtainInvitationError());
+					throw error(400, m.factual_petty_marten_startle());
 				} else {
 					const responseData = deserialize(await response.text());
-					$inviteId = responseData.data?.endorsement?.id;
+					if (responseData && typeof responseData === 'object' && 'data' in responseData) {
+						const data = responseData.data as { endorsement?: { id?: string } };
+						$inviteId = data?.endorsement?.id ?? '';
+					}
 				}
 			}
 			goto('/login');
@@ -91,13 +87,14 @@
 			maybeSubmit();
 		}
 
-		if (existingBadgeClaim && !$claimNarrative && !$claimUrl) {
+		if (existingBadgeClaim) {
 			const claimJson = JSON.parse(existingBadgeClaim.json?.toString() || '{}') || {};
 
-			$claimNarrative = claimJson.narrative || '';
-			$claimUrl = claimJson.id || '';
+			// Priority: Existing claim narrative, template narrative, or empty string
+			$claimNarrative = claimJson.narrative || achievementConfig?.json?.claimTemplate || '';
+			$claimUrl = claimJson.id ?? '';
 		} else if (!existingBadgeClaim && !$claimPending) {
-			$claimNarrative = '';
+			$claimNarrative = achievementConfig?.json?.claimTemplate ?? '';
 			$claimUrl = '';
 		}
 	});
@@ -123,7 +120,7 @@
 			<label
 				for="identifier"
 				class="block mb-2 text-sm font-medium text-gray-900 dark:text-gray-300"
-				>{m.claim_yourPreferredEmail()}</label
+				>{m.flat_weary_pug_describe()}</label
 			>
 			{#if userIdentifiers.length}
 				<select
@@ -142,7 +139,7 @@
 					id="identifier_input"
 					name="identifier"
 					class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500"
-					placeholder="name@mycommunity.com"
+					placeholder={m.few_seemly_mare_propel()}
 					bind:value={$claimEmail}
 					required
 				/>
@@ -152,16 +149,16 @@
 
 		<div class="mb-6">
 			<p class="max-w-2xl my-4 text-sm text-gray-500 dark:text-gray-400">
-				{m.claimForm_narrative_description()}
+				{m.firm_clear_fox_narrdesc()}
 			</p>
 			<label for="narrative" class="block mb-2 text-sm font-medium text-gray-900 dark:text-gray-300"
-				>{m.achievement_narrative()}</label
+				>{m.patchy_crazy_marten_march()}</label
 			>
 			<p class="max-w-2xl my-4 text-sm text-gray-500 dark:text-gray-400">
 				{#if achievement.criteriaNarrative}
 					<MarkdownRender value={achievement.criteriaNarrative} />
 				{:else}
-					{m.claimForm_narrativeInstructions()}
+					{m.bright_swift_eagle_narrinst()}
 				{/if}
 			</p>
 			<MarkdownEditor bind:value={$claimNarrative} inputName="narrative" />
@@ -170,36 +167,36 @@
 			<label
 				for="evidenceUrl"
 				class="block mb-2 text-sm font-medium text-gray-900 dark:text-gray-300"
-				>{m.evidenceURL()}</label
+				>{m.calm_steady_lynx_evidence()}</label
 			>
 			<input
 				type="text"
 				id="evidenceUrl"
 				name="evidenceUrl"
 				class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500"
-				placeholder="I completed a project.."
+				placeholder={m.noisy_true_kangaroo_dine()}
 				bind:value={$claimUrl}
 			/>
 		</div>
 	{:else if claimIntent == 'REJECTED'}
 		<h3 class="mb-2 mt-8 text-2xl font-bold tracking-tight text-gray-900 dark:text-white">
-			{m.invitation_rejectConfirm()}
+			{m.antsy_fresh_mantis_fry()}
 		</h3>
 		<p class="max-w-2xl my-4 text-sm text-gray-500 dark:text-gray-400">
-			{m.invitation_rejectConfirm_description()}
+			{m.cuddly_upper_deer_support()}
 		</p>
 	{/if}
 	<div class="flex gap-1">
 		<Button
 			submodule="primary"
 			buttonType="submit"
-			text={m.submitCTA()}
+			text={m.bold_swift_eagle_submit()}
 			id="claimFormSubmitButton"
 		/>
 		<Button
 			submodule="secondary"
 			buttonType="button"
-			text={m.cancelCTA()}
+			text={m.calm_steady_lynx_cancel()}
 			on:click={handleCancel}
 		/>
 	</div>
